@@ -1,0 +1,5 @@
+name = Multi Step Login
+description = "Multi Step forms capturing gender,category, ecommerce sites and personalized feeds"
+core = 7.x
+
+

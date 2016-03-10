@@ -1,0 +1,52 @@
+<?php
+/**
+ * @file
+ * Contains facebook_rules integration with message functions
+ */
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function facebook_rules_message_entity_info_alter(&$entity_info) {
+  $entity_info['message']['view modes']['facebook'] = array(
+    'label' => t('Facebook'),
+    'custom settings' => TRUE,
+  );
+}
+
+/**
+ * Implements hook_token_info().
+ */
+function facebook_rules_message_token_info() {
+  $info['tokens']['message']['facebook'] = array(
+    'name' => t('Facebook'),
+    'description' => t('Message text to be displayed on Facebook.'),
+  );
+
+  return $info;
+}
+
+/**
+ * Implements hook_tokens().
+ */
+function facebook_rules_message_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  $replacements = array();
+  // Only handle message entities.
+  if (!in_array($type, array('message'))) {
+    return;
+  }
+
+  foreach ($tokens as $name => $original) {
+    // Limit to view mode facebook.
+    if (!in_array($name, array('facebook'))) {
+      continue;
+    }
+
+    if (isset($data['message'])) {
+      $build = $data['message']->buildContent('facebook');
+      $replacements[$original] = drupal_render($build);
+    }
+  }
+
+  return $replacements;
+}

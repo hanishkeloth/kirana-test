@@ -1,0 +1,5 @@
+name = Wishary feeds
+description = The module which helps to load the relevant wishes to the logged in user.
+core = 7.x
+; NEW LINE
+configure = admin/config/content/wishary_feeds

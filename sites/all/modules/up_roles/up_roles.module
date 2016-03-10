@@ -1,0 +1,99 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_menu().
+ */
+function up_roles_menu() {
+  $items = array();
+ 
+  $items['admin/config/people/userpointsroles'] = array(
+    'title'            => 'Userpoints roles',
+    'page callback'    => 'drupal_get_form',
+    'page arguments'   => array('up_roles_select_form'),
+    'access arguments' => array('administer users'),
+    'file' => 'up_roles.admin.inc',
+  );
+  $items['admin/config/people/userpointsroles/select'] = array(
+    'title' => 'Select',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['admin/config/people/userpointsroles/list'] = array(
+    'title'            => 'List',
+    'page callback'    => 'up_roles_list_page',
+    'access arguments' => array('administer users'),
+    'file' => 'up_roles.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/people/userpointsroles/config'] = array(
+    'title'            => 'Config',
+    'page callback'    => 'up_roles_config_page',
+    'access arguments' => array('administer users'),
+    'file' => 'up_roles.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_userpoints().
+ */
+function up_roles_userpoints($op, $params='') {
+  switch ($op) {
+    case 'points after':
+      //加载当前加分用户
+      $account = user_load($params['uid']);
+      $current_points = userpoints_get_current_points($params['uid']); 
+      $previous_points = $current_points - $params['points'];
+      $sql = 'SELECT rid FROM {userpoints_roles} WHERE low <= :low AND high >= :high';
+      //根据当前积分,获取该积分应该对应的角色
+      $current_result = db_query($sql,array(':low' => $current_points, ':high' => $current_points))->fetchObject();
+      //drupal_set_message('当前积分：'.$current_points.'此前积分：'.$previous_points);
+      //$previous_sql = 'SELECT rid FROM {userpoints_roles} WHERE low <= %d AND high >= %d';
+      //根据以前积分,获取该积分应该对应的角色
+      $previous_result = db_query($sql,array(':low' => $previous_points, ':high' => $previous_points))->fetchObject();
+      //drupal_set_message('当前rid：'.$current_result.'此前rid：'.$previous_result);
+      //rules_invoke_event('userpoints_event_points_awarded', $account, $params);
+      //用户当前拥有的角色ID数组
+      $account_roles = $account->roles;
+      $current_roles = array_keys($account_roles);
+      drupal_set_message($current_roles);
+      //当前rid为空
+      if(empty($current_result)){
+        //前一个rid为空
+        if(empty($previous_result)){
+				
+        }else{
+          //如果当前rid为空,上一rid存在,那么注销掉上一个rid,这里判断了用户当前角色中是否包含了上一个rid
+          db_query('DELETE FROM {users_roles} WHERE uid = :uid AND rid = :rid', array(':uid' => $params['uid'], ':rid' => $previous_result->rid));
+        }
+      }else{ 
+        //当前rid不为空
+        //前一个rid为空
+        if(empty($previous_result)){
+          //如果用户还不具有当前rid的角色，那么为用户保存这个角色
+          if(!in_array($current_result->rid,$current_roles)){
+            //unset($account->roles)
+            //unset($account_roles[$previous_result]);
+            //这里仅仅为了更新用户的角色,并不知道当前角色的名字,所以使用rid替代了
+            db_query('INSERT INTO {users_roles} (uid,rid) VALUES (:uid, :rid)', array(':uid' => $params['uid'], ':rid' => $current_result->rid));
+          }
+        }else{
+          //前一个rid不为空
+          //首先检查一下两者是否相等，如果相等，则不更新，此时又一例外，那就是用户没有这个rid角色，	
+          if($previous_result->rid == $current_result->rid){
+            //例外时，为用户添加这个角色
+            if(!in_array($current_result->rid, $current_roles)){
+              //这里仅仅为了更新用户的角色,并不知道当前角色的名字,所以使用rid替代了
+              db_query('INSERT INTO {users_roles} (uid,rid) VALUES (:uid, :rid)', array(':uid' => $params['uid'], ':rid' => $current_result->rid));
+            }
+          }else{
+            db_query('INSERT INTO {users_roles} (uid,rid) VALUES (:uid, :rid)', array(':uid' => $params['uid'], ':rid' => $current_result->rid));
+            db_query('DELETE FROM {users_roles} WHERE uid = :uid AND rid = :rid', array(':uid' => $params['uid'], ':rid' => $previous_result->rid));
+          }
+        }	
+      }
+    break;
+  }
+}

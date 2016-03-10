@@ -1,0 +1,39 @@
+<?php
+
+function pdm_overlay_modal_prep($type = 'fixed', $width = 600, $height = 'auto') {
+
+  // Load the modal library and add the modal javascript.
+  ctools_include('modal');
+  ctools_include('ajax');
+  ctools_modal_add_js();
+  drupal_add_js(drupal_get_path('module', 'pdm_overlay') . 'pdm_overlay.js');
+  drupal_add_library('system', 'drupal.ajax'); // not needed for ctools modal, but most pages that have one have the other
+  drupal_add_library('system', 'jquery.form'); // not needed for ctools modal, but most pages that have one have the other
+  drupal_add_js(array(
+      'pdm-modal' => array(
+          'closeImage' => theme('image', array(
+            'path' => drupal_get_path('module', 'pdm_overlay') . '/images/message-dismiss.png',
+            'title' => t('Close window'),
+            'alt' => t('Close window'),
+          )),
+          'modalSize' => array(
+            'type' => $type,
+            'width' => $width,
+            'height' => $height,
+          ),
+          'modalOptions' => array(
+            'opacity' => 0.8,
+            'background' => '#fff'
+          ),
+          'modalTheme' => 'PDMCToolsModalDialog',
+        ),
+      ), 'setting');
+}
+
+function pdm_overlay_modal_render($message) {
+  pdm_overlay_modal_prep();
+  $js = "Drupal.CTools.Modal.show('pdm-modal');
+    jQuery('#modalContent .modal-title').html('');
+    jQuery('#modalContent .modal-content').html('{$message}');";
+  drupal_add_js($js, array('type' => 'inline', 'scope' => 'footer'));
+}

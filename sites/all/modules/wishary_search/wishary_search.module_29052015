@@ -1,0 +1,160 @@
+<?php
+
+function wishary_search_menu() {
+
+    $items['wish_search/suggestions/%'] = array(
+     'description' => "Search Suggestions",
+     'page callback' => 'wishary_search_suggestions',
+     'page arguments' => array(2),
+     'access callback' => TRUE,
+     'type' => MENU_CALLBACK,
+    );
+
+    return $items;
+}
+
+function wishary_search_suggestions($search_keyword=NULL) {
+    if(empty($search_keyword)) {
+        $search_keyword = arg(2);    
+    }    
+    module_load_include('inc', 'wishary_search', 'resources/wishary_search_resource');
+    $suggestions_list_array = _services_search_category_retrieve($search_keyword,'array');
+   // $suggestions_list_array = json_decode(json_encode((array)$suggestions_list_array),TRUE);
+    $suggestions_list = array();
+    $i=0;
+    $index = array();
+    foreach($suggestions_list_array as $suggestions) {
+        //echo "<pre>";print_r($suggestions);
+        if($suggestions['main_category']!=$suggestions_list[$i]['main_cat']){
+            $suggestions_list[$i]['main_cat'] = $suggestions['main_category'];
+            $suggestions_list[$i]['sub_cat'] = $suggestions['sub_category'];
+            $suggestions_list[$i]['color'] = $suggestions['color'];
+            $suggestions_list[$i]['brand'] = $suggestions['brand'];
+
+        }
+        $i++;
+    }
+    foreach ($suggestions_list as $key => $row) {
+        $distance[$key] = $row['main_cat'];
+    }
+    array_multisort($distance,SORT_ASC,$suggestions_list); 
+    //echo "<pre>";print_r($suggestions_list);
+
+   /*foreach($suggestions_list as $k => $v) 
+    {
+        foreach($suggestions_list as $key => $value) 
+        {
+            if($k != $key && $v['main_cat'] == $value['main_cat'])
+            {
+                 unset($suggestions_list[$k]);
+            }
+        }
+    }
+    echo "<pre>";print_r($suggestions_list);*/
+    //exit;
+    return theme('search_suggestions', array('suggestions'=>$suggestions_list));
+}
+
+function make_unique($array, $ignore)
+{
+    while($values = each($array))
+    {
+        if(!in_array($values[1], $ignore))
+        {
+            $dupes = array_keys($array, $values[1]);
+            unset($dupes[0]);
+            foreach($dupes as $rmv)
+            {
+                unset($array[$rmv]);
+            }            
+        }
+    }
+    return $array;
+}
+
+/**
+ * Implements hook_block_theme().
+ */
+function wishary_search_theme() {
+    return array(
+        'search_suggestions' => array(
+            'variables' => array('suggestions' => array()),
+            'template' => 'themes/wishary_search',
+        ),
+    );
+}
+
+function wishary_search_block_info(){
+    $blocks = array();
+    $blocks['search_suggestions'] = array(
+        'info' => t('Search Suggestions'),
+    );
+    return $blocks;
+}
+
+function wishary_search_block_view($delta = '') {
+    $block = array();
+    switch ($delta) {
+        case 'search_suggestions':
+            $block['subject'] = '';
+            $block['content'] = wishary_search_suggestions();
+            break;
+    }
+    return $block;
+}
+
+/**
+* Implements of hook_services_resources().
+*/
+function wishary_search_services_resources() {
+	$resource = array(
+		'search' => array(
+			'operations' => array(
+				'index' => array(
+                    'help' => 'Searching the wishes',
+                    'file' => array('type' => 'inc', 'module' => 'wishary_search', 'name' => 'resources/wishary_search_resource'),
+                    'callback' => '_get_search_suggestions_results',
+                    'args' => array(
+                        array(
+                            'name' => 'term',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'term'),
+                            'type' => 'string',
+                            'description' => 'Keyword to be searched',
+                        ),
+                        array(
+                            'name' => 'type',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'type'),
+                            'type' => 'string',
+                            'description' => 'Type of search (Suggestons/results)',
+                        ),
+                        array(
+                            'name' => 'offset',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'offset'),
+                            'type' => 'int',
+                            'description' => 'start index',
+                        ),
+                        array(
+                            'name' => 'limit',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'limit'),
+                            'type' => 'int',
+                            'description' => 'limit index',
+                        ),
+                    ),
+                    'access callback' => '_search_access_provide_access',
+                    'access arguments' => array('view'),
+                    'access arguments append' => TRUE,
+                ),
+			),
+		),
+	);
+    return $resource;
+}
+
+/** * Access callback */
+function _search_access_provide_access() {
+  return TRUE;
+}

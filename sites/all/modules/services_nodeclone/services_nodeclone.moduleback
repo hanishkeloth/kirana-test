@@ -1,0 +1,76 @@
+<?php
+/**
+ * Implements of hook_services_resources().
+ */
+function services_nodeclone_services_resources() {
+  $api = array(
+    'collectpost' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieves user room info',
+		  'file' => array('type' => 'inc', 'module' => 'services_collection', 'name' => 'services_collection.resource'),
+          'callback' => '_services_nodeclone_resource_myroom',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+           
+				 array(
+              'name' => 'nodeid',
+              'type' => 'int',
+              'description' => 'node id',
+              'source' => array('param' => 'nodeid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			
+			),
+        ),
+        
+      ),
+    ),
+    
+
+	
+	
+  );
+  return $api;
+}
+
+
+function _nodeclone_blog_retrieve() {
+
+  /*global $user;
+ $bid = 9;
+   if (isset($bid) and $bid) {
+    db_update('pinboard_boards')
+      ->condition('bid', $bid)
+      ->fields(array(
+    	  'uid' => 1,
+    	  'name' => 'monehanishe',
+    	  'data' => ''
+  	  ))
+      ->execute();
+    drupal_set_message('success');
+    $bid = $bid;
+    $bp = new stdClass;
+    $bp->bid = $bid;
+    $bp->uid = 1;
+    $bp->name = 'monehanishe';
+    $bp->username = 'admin';
+    pinboard_helper_pathauto_update_alias($bp, 'update');
+    }*/
+    return "hello word";
+    }
+    
+    /**
+ * Callback function for blog retrieve
+ */

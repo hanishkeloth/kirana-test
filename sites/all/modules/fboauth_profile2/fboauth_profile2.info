@@ -1,0 +1,12 @@
+name = Facebook OAuth Profile2 Integration
+description = Allows to map Facebook profile information to Profile2 fields.
+core = 7.x
+dependencies[] = fboauth
+dependencies[] = profile2
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-1.0-beta1+1-dev"
+core = "7.x"
+project = "fboauth_profile2"
+datestamp = "1380578001"
+

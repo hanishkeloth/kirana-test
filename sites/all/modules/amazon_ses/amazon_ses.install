@@ -1,0 +1,23 @@
+<?php
+/**
+ * @file
+ * The installation file for amazon_mail_service module.
+ */
+
+/**
+ * Implements hook_enable().
+ */
+function amazon_ses_enable() {
+  $mail_modes = variable_get('mail_system', array('default-system' => 'DefaultMailSystem'));
+  $mail_modes['default-system'] = 'AmazonSesSystem';
+  variable_set('mail_system', $mail_modes);
+}
+
+/**
+ * Implements hook_disable().
+ */
+function amazon_ses_disable() {
+  $mail_modes = variable_get('mail_system');
+  $mail_modes['default-system'] = 'DefaultMailSystem';
+  variable_set('mail_system', $mail_modes);
+}

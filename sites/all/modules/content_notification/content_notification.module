@@ -1,0 +1,960 @@
+<?php
+
+function content_notification_menu(){
+   $items['notifications'] = array(
+        'title' => 'Notifications',
+        'description' => 'Link to My notifications',
+        'page arguments' => array(1),
+        'page callback' => '_get_notifications',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_LOCAL_TASK,
+        'menu_name' => 'user-menu'
+    );
+    $items['notifications/all'] = array(
+        'title' => 'Notifications',
+        'description' => 'Link to My notifications',
+        'page callback' => '_get_all_notifications',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_LOCAL_TASK,
+    );
+
+	$items['notification/settings'] = array(
+		'title' => 'Notification Settings',
+		'description' => 'User notification settings',
+		'page callback' => 'drupal_get_form',
+        'access callback' => 'user_is_logged_in',
+        'page arguments' => array('notification_settings_form'),
+        'type' => MENU_CALLBACK,
+	);
+
+	$items['admin/settings/notification-email'] = array(
+		'title' => t('Notifications Email Configuration'),
+		'type' => MENU_LOCAL_TASK,
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('notification_mail_config_form'),
+		'access callback' => TRUE,
+    );
+    $items['notification/status_update'] = array(
+        'description' => 'Ajax call for updating read status',
+        'page callback' => 'notification_update_status',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_CALLBACK,
+    );
+	$items['system_notification/status_update'] = array(
+        'description' => 'Ajax call for updating read status',
+        'page callback' => 'system_notification_update_status',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_CALLBACK,
+    );
+	$items['all_notifications/status_update'] = array(
+        'description' => 'Ajax call for updating read status',
+        'page callback' => 'all_notification_update_status',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_CALLBACK,
+    );
+	$items['notification/mail'] = array(
+        'description' => 'Notifications mail sending',
+        'page callback' => '_send_notification_mails',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_CALLBACK,
+    );
+
+    return $items;
+}
+
+/**
+ * Function to notify the user about node cloned
+ */
+function _add_notification($user_uid, $message, $entity_id, $entity_type, $sent_uid,$notification_type,$message_type=NULL){
+    $node_notify = db_insert('content_notification')
+        ->fields(array(
+            'received_uid' => $user_uid,
+            'sent_uid' => $sent_uid,
+            'entity_id' => $entity_id,
+            'created' => strtotime(date('Y-m-d H:i:s')),
+            'noty_message' => $message,
+            'entity_type' => $entity_type,
+			'notification_type' => $notification_type,
+        ))
+        ->execute();
+	/*$settings = _receive_notification_settings($user_uid);
+	if(isset($settings->email_notification) && $settings->email_notification == 1){
+		$notification_detail['notify_id'] = $node_notify;
+		$notification_detail['message'] = $message;
+		$notification_detail['date'] = date('d-m-y');
+		$notification_detail['type'] = $entity_type;
+		$notification_detail['entity_id'] = $entity_id;
+		_send_notification_mail($user_uid,$notification_detail);
+	}*/
+    if($notification_type!='system'){
+        module_load_include('module', 'push_notifications', 'push_notifications');
+        push_notifications_send_message(array($user_uid), $message,$entity_id,$message_type);
+    }
+    return $node_notify;
+}
+
+function _get_notifications(){
+   module_load_include('module', 'push_notification', 'push_notification');
+   drupal_add_css(drupal_get_path('module', 'content_notification') . '/css/style.css', array('group' => CSS_DEFAULT, 'every_page' => TRUE));
+   drupal_add_js( array( 'content_notification' => array( 'base_path' => base_path() )), 'setting' );
+   global $user;
+   $query = db_select('content_notification','cn')
+        ->fields('cn', array('notify_id','read_status','created','noty_message','entity_id','entity_type','sent_uid'))
+        ->condition('received_uid',$user->uid)
+		->orderBy('created', 'DESC')
+		->range(0,10);
+    $result = $query->execute()->fetchAll();
+    $variables = array();
+	$i=0;
+    foreach($result as $record){
+        $variables[$i] = $record;
+		if($record->entity_type == 'follow'){
+			$entity_id = $record->sent_uid;
+		}else{
+			$entity_id = $record->entity_id;
+		}
+		$variables[$i]->image = _get_profile_content_images($record->entity_type, $entity_id);
+		$i++;
+    }
+	$push_notifications = _system_notifications_list();
+    $push_notifications = array();
+   return theme('content_notification_recent', array('notifications'=>$variables,'push_notifications' => $push_notifications));
+}
+
+/**
+ * function to convert unixtimestamp to Human Readable date/time format
+ * @param $time
+ * @return string
+ */
+function get_date_time_ago ($time)
+{
+
+    $time = time() - $time; // to get the time since that moment
+
+    $tokens = array (
+        31536000 => 'year',
+        2592000 => 'month',
+        604800 => 'week',
+        86400 => 'day',
+        3600 => 'hour',
+        60 => 'minute',
+        1 => 'second'
+    );
+
+    foreach ($tokens as $unit => $text) {
+        if ($time < $unit) continue;
+        $numberOfUnits = floor($time / $unit);
+        return $numberOfUnits.' '.$text.(($numberOfUnits>1)?'s':'') . ' ago';
+    }
+
+}
+
+function content_notification_views_api() {
+    return array(
+        'api' => '3.0-alpha1',
+        'path' => drupal_get_path('module','content_notification'). '/views',
+    );
+}
+
+/*function content_notification_views_pre_render(&$view){
+    $results = &$view->result;
+    foreach ($results as $key => $result) {
+        if ($view->name == 'notifications') {
+            $results[$key]->content_notification_created = get_date_time_ago($result->content_notification_created);
+        }
+    }
+}*/
+
+function content_notification_block_info(){
+    $blocks = array();
+    $blocks['content_notify'] = array(
+        'info' => t('Content Notifications'),
+    );
+	$blocks['notification_count'] = array(
+		'info' => t('Notifications Count'),
+	);
+    $blocks['all_notifications'] = array(
+        'info' => t('All Notifications'),
+    );
+    return $blocks;
+}
+
+function content_notification_block_view($delta = '') {
+    $block = array();
+    switch ($delta) {
+        case 'content_notify':
+            $block['subject'] = '';
+            $block['content'] = _get_notifications();
+            break;
+		case 'notification_count':
+            $block['subject'] = '';
+            $block['content'] = _get_notifications_count();
+            break;
+        case 'all_notifications':
+            $block['subject'] = '';
+            $block['content'] = _get_all_notifications();
+    }
+    return $block;
+}
+
+/**
+ * Implements hook_block_theme().
+ */
+function content_notification_theme() {
+    return array(
+        'content_notification_recent' => array(
+            'variables' => array('notifications' => array(),'push_notifications' => array()),
+            'template' => 'themes/content_notifications_recent',
+        ),
+		'content_notification_all' => array(
+            'variables' => array('notifications' => array(),'push_notifications' => array()),
+            'template' => 'themes/content_notifications_all',
+        ),
+    );
+}
+
+function theme_content_notification($variables) {
+    return $variables['notifications'];
+}
+
+function _get_all_notifications(){
+    module_load_include('module', 'push_notification', 'push_notification');
+	drupal_add_js( array( 'content_notification' => array( 'base_path' => base_path() )), 'setting' );
+    global $user;
+    $query = db_select('content_notification','cn')
+        ->fields('cn', array('notify_id','read_status','created','noty_message','entity_id','entity_type','sent_uid'))
+        ->condition('received_uid',$user->uid)
+		->orderBy('created', 'DESC');
+    $result = $query->execute()->fetchAll();
+    $variables = array();
+	$i=0;
+    foreach($result as $record){
+        $variables[$i] = $record;
+		if($record->entity_type == 'follow'){
+			$entity_id = $record->sent_uid;
+		}else{
+			$entity_id = $record->entity_id;
+		}
+		$variables[$i]->image = _get_profile_content_images($record->entity_type, $entity_id);
+		$i++;
+    }
+	$push_notifications = _system_notifications_list();
+	return theme('content_notification_all', array('notifications'=>$variables,'push_notifications' => $push_notifications));
+}
+
+/**
+ * Update the read status of the notification
+ */
+
+function notification_update_status($notify_id = NULL){
+    global $user;
+	if($notify_id == NULL){
+		$notification_id = isset($_POST['notification_id']) ? $_POST['notification_id'] : '';
+	}else{
+		$notification_id = $notify_id;
+	}
+	$query = db_update("content_notification")
+            ->fields(array('read_status' => '1',))
+            ->condition('notify_id', $notification_id, '=')
+			->condition('read_status', '0', '=')
+            ->execute();
+	if($notify_id == NULL){
+		drupal_json_output("success");
+	}
+}
+
+/**
+* Notification settings form
+*
+**/
+function notification_settings_form(){
+	$form = array();
+	global $user;
+	$notification_settings = _receive_notification_settings($user->uid);
+	$form['email_notification'] = array(
+		'#type' => 'checkbox',
+		'#title' => t("Receive Email notification"),
+		'#default_value' => isset($notification_settings->email_notification)? $notification_settings->email_notification:'',
+	);
+	$form['sound_notification'] = array(
+		'#type' => 'checkbox',
+		'#title' => t("Play a sound when each new notification is received"),
+		'#default_value' => isset($notification_settings->sound_notification)? $notification_settings->sound_notification:'',
+	);
+	$form['actions']['save'] = array(
+		'#type' => 'submit',
+		'#value' => t('Save settings'),
+		'#submit' => array('notification_settings_form_submit'),
+	);
+	return $form;
+}
+
+/**
+* Update the notification settings for the current user
+*
+**/
+function notification_settings_form_submit($form, &$form_state){
+	global $user;
+	$email_notification = $form_state['values']['email_notification'];
+	$sound_notification = $form_state['values']['sound_notification'];
+	$query = db_select('notification_settings', 'ns')
+		->fields('ns',array('setting_id'))
+		->condition('ns.uid',$user->uid);
+	$result = $query->execute()->fetchField();
+	if(empty($result)){
+		$notification_settings = db_insert("notification_settings")
+			->fields(array(
+				'uid'=>$user->uid,
+				'email_notification' => $email_notification,
+				'sound_notification' => $sound_notification,
+			))
+		->execute();
+	}else{
+		$notification_settings = db_update("notification_settings")
+			->fields(array(
+				'email_notification' => $email_notification,
+				'sound_notification' => $sound_notification,
+			))
+			->condition('uid',$user->uid,'=')
+		->execute();
+	}
+	if($notification_settings){
+		drupal_set_message(t("Notification settings updated"));
+	}
+
+}
+
+/**
+* Retrieve the notification settings for the user
+*
+**/
+function _receive_notification_settings($uid){
+	/*$query = db_select('notification_settings', 'ns')
+		->fields('ns',array('setting_id','email_notification','sound_notification'))
+		->condition('ns.uid',$uid);
+	$result = $query->execute()->fetchAll();
+	if(!empty($result)){
+		return $result[0];
+	}else{
+		return NULL;
+	}*/
+	$user = user_load($uid);
+	if(isset($user->field_notification_email) && !empty($user->field_notification_email)){
+	  $result[0]->email_notification = $user->field_notification_email['und'][0]['value'];
+	}else{
+		$result[0]->email_notification = "";
+	}
+	if(isset($user->field_notification_sound) && !empty($user->field_notification_sound)){
+	  $result[0]->sound_notification = $user->field_notification_sound['und'][0]['value'];
+	}else{
+	  $result[0]->sound_notification = '';
+	}
+	return $result[0];
+}
+
+function notification_mail_config_form() {
+  $form = array();
+  $form['notification_email_subject'] = array(
+    '#title' => t('Subject'),
+    '#type' => 'textfield',
+  );
+  $form['notification_email_content'] = array(
+    '#title' => t('Content'),
+    '#type' => 'textarea',
+  );
+  $form['notification_email_submit'] = array(
+    '#type' => 'submit',
+    '#value' =>t('submit'),
+  );
+  return $form;
+}
+
+/**
+ *
+ * Implementation of hook_FormID_alter of user_admin_settings
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ */
+function content_notification_form_user_admin_settings_alter(&$form, $form_state, $form_id) {
+	$form['notification_mail'] = array(
+    '#type' => 'fieldset',
+    '#collapsible' => TRUE,
+    '#title' => t('Notifications Mail'),
+    '#description' => t('Send email to user about notifications received.'),
+    '#group' => 'email',
+  );
+    $form['notification_mail']['notification_mail_subject'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Subject'),
+    '#group' => 'email',
+    '#default_value' => variable_get('notification_mail_subject', FALSE),
+  );
+  $form['notification_mail']['notification_mail_body'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Body'),
+    '#group' => 'email',
+    '#rows' => 15,
+    '#default_value' => variable_get('notification_mail_body', FALSE),
+  );
+  return $form;
+}
+
+/**
+ *
+ * Enter description here ...
+ * @param $key
+ * @param $message
+ * @param $params
+ */
+function content_notification_mail($key, &$message, $params){
+	$language = $message['language'];
+  	$variables = array('user' => $params['account'], 'message' => $params['message']);
+  	//$message['subject'] .= content_notification_mail_text($key . '_subject', $language, $variables);
+	$message['subject'] .= $params['subject'];
+  	$message['body'][] = content_notification_mail_text($key . '_body', $language, $variables);
+}
+
+function content_notification_mail_text($key, $language = NULL, $variables = array(), $replace = TRUE){
+  $langcode = isset($language) ? $language->language : NULL;
+  if ($admin_setting = variable_get($key, FALSE)) {
+    // An admin setting overrides the default string.
+    $text = $admin_setting;
+  }
+  else {
+	  switch ($key) {
+	  	case 'notification_mail_subject':
+	  	  	//$subject = variable_get('notification_mail_subject', '');
+			//$subject = t("Notification from wishary");
+	  	  	$text = t('Notification from wishary', array(), array('langcode' => $langcode));
+	  		break;
+	  	case 'notification_mail_body':
+	  		//$body = variable_get('notification_mail_body', '');
+			$body = t("Dear [user:name],
+			You have received the notification in wishary
+			[content:message]
+
+			--  [site:name] team");
+	  		$text = t('Dear [user:name],
+			You have received the notification in wishary
+			[content:message]
+			--  [site:name] team', array(), array('langcode' => $langcode));
+	  		break;
+	  }
+	}
+	if ($replace) {
+  	// We do not sanitize the token replacement, since the output of this
+  	// replacement is intended for an e-mail message, not a web browser.
+    	return content_notification_token_replace($text, $variables, array('language' => $language));
+  	}
+  	return $text;
+}
+
+function content_notification_token_replace($replacements, $data, $options){
+	global $base_url;
+  	global $language;
+  	$base = ($language->language) ? $base_url . '/' . $language->language : $base_url;
+  	$replacements = token_replace($replacements, array('user' => $data['user']));
+  	$replacements = str_replace('[content:message]', $data['message'], $replacements);
+  	return $replacements;
+}
+
+function _send_notification_mail($uid, $notification_detail){
+	$user = user_load($uid);
+    $module = 'content_notification';
+	$key = 'notification_mail';
+	$email = $user->mail;
+	$language = language_default();
+	$params = array();
+	$params['account'] = $user;
+	$notification_detail['notify_image'] = _get_profile_content_images($notification_detail['type'],$notification_detail['entity_id']);
+	$params['notifications'] = $notification_detail;
+	$from = variable_get('site_mail', ini_get('sendmail_from'));
+	$send = TRUE;
+	$message = drupal_mail($module, $key, $email, $language, $params, $from, $send);
+}
+
+/**
+* Function to retrieve node/comment/user images to display on notifications
+*
+**/
+function _get_profile_content_images($type, $entity_id=NULL){
+	$notification_image =  '';
+	if(isset($type)){
+		if($type == 'node' || $type == 'comment'){
+			$node = node_load($entity_id);
+			if(!empty($node->field_image)){
+				$field_language = field_language('node', $node, 'field_image');
+				$notification_image = file_create_url($node->field_image[$field_language][0]['uri']);
+			}
+		}
+		/*else if($type == 'comment'){
+			$comment = comment_load($entity_id);
+			if(!empty($comment->field_suggestion_image)){
+				$field_language = field_language('comment', $comment, 'field_suggestion_image');
+				$notification_image = file_create_url($comment->field_suggestion_image[$field_language][0]['uri']);
+			}
+		}*/
+		else if($type == 'follow'){
+			$user = user_load($entity_id);
+			if(!empty($user->picture)){
+				$notification_image = file_create_url($user->picture->uri);
+			}else{
+				$notification_image = file_create_url(variable_get('user_picture_default', ''));
+			}
+		}
+	}
+	return $notification_image;
+}
+
+/**
+* Function to get count of unread notifications
+*
+**/
+function _get_notifications_count(){
+	global $user;
+	$output = '';
+	$q = db_select('content_notification', 'cn');
+	$q->fields('cn', array('read_status'))
+	->condition('cn.read_status', '0','=')
+	  ->condition('received_uid',$user->uid);
+
+	$row_count = $q->countQuery()->execute()->fetchField();
+	$sys_notification_count = _get_push_notification_count();
+    $sys_notification_count = 0;
+	$notification_count = 0;
+	$notification_count = $row_count + $sys_notification_count;
+	if($notification_count!=0){
+	  $output = "<span>".$notification_count."</span>";
+	}
+
+	return $output;
+}
+
+/**
+* Function to get the push notifications count
+*
+**/
+function _get_push_notification_count(){
+	global $user;
+	$todays_date = strtotime(date('Y-m-d'));
+	$result = 0;
+	$result = db_query("select sn.notification_id from system_notification sn where notification_id not in (select notification_id from system_notification_read where uid=$user->uid)
+			  AND (start_date <= $todays_date AND end_date >= $todays_date)")->rowCount();
+	return $result;
+}
+
+/**
+ * Update the read status of the notification
+ */
+
+function system_notification_update_status($notify_id = NULL){
+    $todays_date = strtotime(date('Y-m-d'));
+	global $user;
+	if($notify_id == NULL){
+	  $notification_id = isset($_POST['notification_id']) ? $_POST['notification_id'] : '';
+	}else{
+	  $notification_id = $notify_id;
+	}
+	$status_update = db_insert("system_notification_read")
+					->fields(array(
+					'notification_id' => $notification_id,
+					'uid' => $user->uid,
+					'read_status' => 1,
+					))
+					->execute();
+	if($notify_id == NULL){
+	  drupal_json_output("success");
+	}
+}
+
+function content_notification_enable() {
+  // Check if Receive Notification Email field is not already created.
+  if (!field_info_field('field_notification_email')) {
+
+    // Create the field base.
+    $field = array(
+      'field_name' => 'field_notification_email',
+      'type' => 'list_boolean',
+	  'settings' => array(
+        'allowed_values' => array(0 => 0, 1 => 1), //add the default values for the checkbox
+      ),
+    );
+    field_create_field($field);
+
+    // Create the field instance on the bundle.
+    $instance = array(
+      'field_name' => 'field_notification_email',
+      'entity_type' => 'user',
+      'label' => 'Receive Notification Email',
+      'bundle' => 'user',
+      'settings' => array(
+        // Here you inform either or not you want this field showing up on the registration form.
+        'user_register_form' => 0,
+      ),
+      'widget' => array(
+        'type' => 'options_onoff',
+		'settings' => array('display_label' => 1),
+      ),
+    );
+    field_create_instance($instance);
+  }
+  // Check if Sound Notification field is not already created.
+  if (!field_info_field('field_notification_sound')) {
+
+    // Create the field base.
+    $field = array(
+      'field_name' => 'field_notification_sound',
+      'type' => 'list_boolean',
+	  'settings' => array(
+        'allowed_values' => array(0 => 0, 1 => 1), //add the default values for the checkbox
+      ),
+    );
+    field_create_field($field);
+
+    // Create the field instance on the bundle.
+    $instance = array(
+      'field_name' => 'field_notification_sound',
+      'entity_type' => 'user',
+      'label' => 'Play a sound when new notification is received',
+      'bundle' => 'user',
+      'settings' => array(
+        // Here you inform either or not you want this field showing up on the registration form.
+        'user_register_form' => 0,
+      ),
+      'widget' => array(
+        'type' => 'options_onoff',
+		'settings' => array('display_label' => 1),
+      ),
+    );
+    field_create_instance($instance);
+  }
+}
+
+/**
+ * Update the read status of all the unread notifications
+ */
+
+function all_notification_update_status(){
+    global $user;
+	$query = db_update("content_notification")
+            ->fields(array('read_status' => '1',))
+			->condition('read_status', '0', '=')
+            ->execute();
+	drupal_json_output("success");
+
+}
+
+function content_notification_services_resources() {
+	/*$resources['notifications'] = array();
+	$resources['notifications']['retrieve'] = array(
+		'help' => 'Retrieves a notification.',
+		'file' => array(
+			'type' => 'inc',
+			'module' => 'content_notification',
+			'name' => 'services_notification.resource',
+		),
+		'callback' => 'services_notifications_retrieve',
+		'access callback' => 'services_notifications_access',
+		'access arguments' => array('view'),
+		'access arguments append' => TRUE,
+		'args' => array(
+			'user_id' => array(
+				'name' => 'user_id',
+				'type' => 'int',
+				'description' => 'User Id to get notification.',
+				'source' => array('path' => '0'),
+				'optional' => FALSE,
+			),
+		),
+	);*/
+
+
+  return array(
+    'notifications' => array(
+        'operations' => array(
+          'retrieve' => array(
+            'help' => 'Retrieves a notification.',
+            'file' => array('type' => 'inc', 'module' => 'content_notification', 'name' => 'services_notification.resource'),
+            'callback' => 'services_notifications_retrieve',
+            'access callback' => 'services_notifications_access',
+            'access arguments' => array('view'),
+            'access arguments append' => TRUE,
+            'args' => array(
+              array(
+                'name' => 'user_id',
+                'type' => 'int',
+                'description' => 'User Id to get notification.',
+                'source' => array('path' => '0'),
+                'optional' => FALSE,
+              ),
+              array(
+                'name' => 'offset',
+                'optional' => FALSE,
+                'source' => array('param' => 'offset'),
+                'type' => 'int',
+                'description' => 'start index',
+              ),
+              array(
+                'name' => 'limit',
+                'optional' => FALSE,
+                'source' => array('param' => 'limit'),
+                'type' => 'int',
+                'description' => 'limit index',
+              ),
+            ),
+          ),
+          'update' => array(
+            'help' => 'Update notification read status',
+            'file' => array('type' => 'inc', 'module' => 'content_notification', 'name' => 'services_notification.resource'),
+            'callback' => '_update_notifications',
+            'access callback' => 'services_notifications_access',
+            'access arguments' => array('edit'),
+            'access arguments append' => TRUE,
+            'args' => array(
+              array(
+                'name' => 'notify_id',
+                'optional' => FALSE,
+                'source' => array('path' => 0),
+                'type' => 'int',
+                'description' => 'The unique identifier for this notification.',
+              ),
+              array(
+                'name' => 'notify_type',
+                'optional' => FALSE,
+                'source' => array('path' => 1),
+                'type' => 'char',
+                'description' => 'Type of notification',
+              ),
+              array(
+                'name' => 'user_id',
+                'optional' => FALSE,
+                'source' => array('path' => 2),
+                'type' => 'int',
+                'description' => 'Logged in user Id',
+              ),
+            ),
+          ),
+        ),
+       ),
+       'notifications_count' => array(
+         'retrieve' => array(
+          'file' => array('type' => 'inc', 'module' => 'content_notification', 'name' => 'services_notification.resource'),
+          'help'   => t('Return number of notifications for a user.'),
+          'access callback' => 'services_notifications_access',
+          'access arguments' => array('view'),
+          'access arguments append' => TRUE,
+          'callback' => '_notifications_resource_count_all',
+          'args'     => array(
+            array(
+              'name'         => 'uid',
+              'type'         => 'int',
+              'description'  => t('Logged in user Id'),
+              'source' => array('path' => '0'),
+              'optional'     => FALSE,
+            ),
+          ),
+        ),
+       ),
+       'notifications_email' => array(
+         'retrieve' => array(
+          'file' => array('type' => 'inc', 'module' => 'content_notification', 'name' => 'services_notification.resource'),
+          'help'   => t('Return notification email status of user.'),
+          'access callback' => 'services_notifications_access',
+          'access arguments' => array('view'),
+          'access arguments append' => TRUE,
+          'callback' => '_notifications_resource_email_status',
+          'args'     => array(
+            array(
+              'name'         => 'uid',
+              'type'         => 'int',
+              'description'  => t('Logged in user Id'),
+              'source' => array('path' => '0'),
+              'optional'     => FALSE,
+            ),
+          ),
+        ),
+        'update' => array(
+            'help' => 'Update notification email status of user',
+            'file' => array('type' => 'inc', 'module' => 'content_notification', 'name' => 'services_notification.resource'),
+            'callback' => '_update_notifications_email_status',
+            'access callback' => 'services_notifications_access',
+            'access arguments' => array('edit'),
+            'access arguments append' => TRUE,
+            'args' => array(
+              array(
+                'name' => 'user_id',
+                'optional' => FALSE,
+                'source' => array('path' => 0),
+                'type' => 'int',
+                'description' => 'Logged in user Id',
+              ),
+              array(
+                'name' => 'status_value',
+                'optional' => FALSE,
+                'source' => array('path' => 1),
+                'type' => 'int',
+                'description' => 'The notification email status value',
+              ),
+            ),
+          ),
+       ),
+    );
+    return $resources;
+}
+
+function services_notifications_access()
+{
+    return TRUE;
+}
+
+/**
+* Function to send notification mail once in a day
+**/
+function _send_notification_mails(){
+	$query = db_select('content_notification','cn')
+        ->fields('cn', array('received_uid'))
+        ->condition('read_status', '0', '=');
+    $received_users = $query->execute()->fetchAll();
+	$user_array = json_decode(json_encode($received_users), true);
+	$temp_array = array();
+	foreach ($user_array as &$v) {
+		if (!isset($temp_array[$v['received_uid']]))
+			$temp_array[$v['received_uid']] =& $v;
+	}
+	$notifications_user = array_values($temp_array);
+    $language = language_default();
+    $params = array();
+	global $base_url;
+	$theme_path = drupal_get_path('theme', variable_get('theme_default', NULL));
+    foreach ($notifications_user as $notify_user) {
+    	$user = user_load($notify_user['received_uid']);
+    	//$user = user_load('2287');
+
+    	if(isset($user->field_notification_email) && !empty($user->field_notification_email) && $user->field_notification_email['und'][0]['value']==1){
+			$query = db_select('content_notification','cn')
+                ->fields('cn', array('notify_id'))
+                ->condition('received_uid', $user->uid, '=')
+                ->condition('read_status', '0', '=');
+			$notifications_count = $query->execute()->rowCount();
+            $query = db_select('content_notification','cn')
+                ->fields('cn', array('notify_id','read_status','created','noty_message','entity_id','entity_type','sent_uid','received_uid'))
+                ->condition('received_uid', $user->uid, '=')
+                ->condition('read_status', '0', '=')
+				->orderBy('created', 'DESC')//ORDER BY created
+				->range(0,5);
+            $notifications_result = $query->execute()->fetchAll();
+            $params = array();
+            $i=0;
+			$message = "";
+			$message.= "<table cellpadding='0' cellspacing='0'>";
+            if($notifications_count>=1){
+				$subject = "Wishary - Youⶥ got ".$notifications_count." new Notifications waiting for you";
+				$message.="<tr><td colspan='4'>You've got ".$notifications_count." new Notifications waiting in your profile!</td></tr>";
+				$message.="<tr><td colspan='4'><br>Tip: to get more Wishes and Expressions delivered to your feed, follow any people and hashtags that look interesting.</td></tr>";
+				$message.="<tr><td colspan='4'><br>New notifications for you</td></tr>";
+                foreach ($notifications_result as $notification) {
+				if($notification->entity_type == 'follow'){
+					$entity_id = $notification->sent_uid;
+				}else{
+					$entity_id = $notification->entity_id;
+				}
+                $notification->notify_image = _get_profile_content_images($notification->entity_type,$entity_id);
+				$message.= "<tr>";
+					if($notification->entity_type == 'node'){
+						$image_name = $base_url."/".$theme_path."/images/notif-icon4.png";
+						$message.="<td><img src='". $image_name."' alt='notific symbol'></td>";
+						$message.= "<td><a href='".$base_url."/".$notification->entity_id."/".$notification->notify_id."'>".$notification->noty_message."</a><br></td>";
+						$message.= "<td>".format_date($notification->created,'custom','d-m-y')."</td>";
+						//$notify_image = $base_url."/sites/default/files/".$notification->notify_image;
+						$notify_image = $notification->notify_image;
+						$message.="<td><img src='".$notify_image."' width='80px' height='80px' alt='Notification'></td>";
+					}else if($notification->entity_type == 'comment'){
+						$image_name = $base_url."/".$theme_path."/images/notif-icon4.png";
+						$message.="<td><img src='". $image_name."' alt='notific symbol'></td>";
+						$message.= "<td><a href='".$base_url."/".$notification->entity_id."/".$notification->notify_id."'>".$notification->noty_message."</a><br></td>";
+						$message.= "<td>".format_date($notification->created,'custom','d-m-y')."</td>";
+						//$notify_image = $base_url."/sites/default/files/".$notification->notify_image;
+						$notify_image = $notification->notify_image;
+						$message.="<td><img src='".$notify_image."' width='80px' height='80px' alt='Notification'></td>";
+					}else if($notification->entity_type == 'follow'){
+						$started_find = strpos($notification->noty_message,'started');
+						$username = substr($notification->noty_message, 0, $started_find-1);
+						$image_name = $base_url."/".$theme_path."/images/notif-icon1.png";
+						$message.="<td><img src='". $image_name."' alt='notific symbol'></td>";
+						$message.= "<td><a href='".$base_url."/".$username."?notify_id=".$notification->notify_id."'>".$notification->noty_message."</a><br></td>";
+						$message.= "<td>".format_date($notification->created,'custom','d-m-y')."</td>";
+						//$notify_image = $base_url."/sites/default/files/pictures/".$notification->notify_image;
+						$notify_image = $notification->notify_image;
+						$message.="<td><img src='".$notify_image."' width='80px' height='80px' alt='Notification'></td>";
+					}
+					if(strpos($notification->noty_message,'liked')){
+						if($notification->entity_type == 'node'){
+							$image_name = $base_url."/".$theme_path."/images/notif-icon2.png";
+							$message.="<td><img src='". $image_name."' alt='notific symbol'></td>";
+							$message.= "<td><a href='".$base_url."/".$notification->entity_id."/".$notification->notify_id."'>".$notification->noty_message."</a><br></td>";
+							$message.= "<td>".format_date($notification->created,'custom','d-m-y')."</td>";
+							//$notify_image = $base_url."/sites/default/files/".$notification->notify_image;
+							$notify_image = $notification->notify_image;
+							$message.="<td><img src='".$notify_image."' width='80px' height='80px' alt='Notification'></td>";
+						}
+						else if($notification->entity_type == 'comment'){
+							$image_name = $base_url."/".$theme_path."/images/notif-icon3.png";
+							$message.="<td><img src='". $image_name."' alt='notific symbol'></td>";
+							$message.= "<td><a href='".$base_url."/".$notification->entity_id."/".$notification->notify_id."'>".$notification->noty_message."</a><br></td>";
+							$message.= "<td>".format_date($notification->created,'custom','d-m-y')."</td>";
+							//$notify_image = $base_url."/sites/default/files/".$notification->notify_image;
+							$notify_image = $notification->notify_image;
+							$message.="<td><img src='".$notify_image."' width='80px' height='80px' alt='Notification'></td>";
+						}
+					}
+					$message.= "</tr>";
+                    $i++;
+                }
+                $email = $user->mail;
+                $params['account'] = $user;
+				$params['subject'] = $subject;
+             }
+             if($notifications_count>=$i){
+				$message.="<tr><td colspan='4'><br><a href='http://www.wishary.in/notifications/all'> See all your notifications </td></tr>";
+                $message.= "<tr><td><br>Keep Wishing!</td></tr>";
+
+            }
+			$message.= "</table>";
+			if($notifications_count>=1){
+				$params['message'] = $message;
+				$module = 'content_notification';
+				$key = 'notification_mail';
+				$language = language_default();
+				$from = variable_get('site_mail', ini_get('sendmail_from'));
+				$send = TRUE;
+			}
+			//echo "<pre>";print_r($params);
+			$mail_sent = drupal_mail($module, $key, $email, $language, $params, $from, $send);
+			//echo "<pre>";print_r($mail_sent);
+			if (!$mail_sent['result']) {
+				watchdog('mail', 'Error sending e-mail', WATCHDOG_ERROR);
+				//drupal_set_message(t('Unable to send e-mail. Contact the site administrator if the problem persists.'), 'error');
+			}else{
+				//drupal_set_message(t('Mail Sent successfully.'), 'success');
+			}
+    	}
+    }
+
+}
+
+/**
+ * Implements of hook_cron().
+ */
+function content_notification_cron(){
+	/*$cron_last = variable_get('cron_last', time());
+	if ($cron_last <= (time() - 60*60*24)) {
+		_send_notification_mails();
+	}*/
+	// today's date as of midnight, exp. 05/18/15 12:00:00 am
+	define('TODAY', mktime(0, 0, 0, date('n'), date('j'), date('Y'), 0));
+	if (variable_get('daily_cron', TODAY) != TODAY) {
+		variable_set('daily_cron', TODAY);
+		_send_notification_mails();
+	}
+}

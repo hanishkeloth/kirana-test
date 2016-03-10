@@ -1,0 +1,17 @@
+name = Birthdays
+description = Provides a birthday field type. Displays and reminds of upcoming birthdays.
+dependencies[] = field
+files[] = birthdays.test
+files[] = birthdays_birthday.inc
+files[] = views/birthdays_field_views_handler_field.inc
+files[] = views/birthdays_field_views_handler_sort.inc
+files[] = views/birthdays_field_views_handler_filter.inc
+core = 7.x
+package = Fields
+
+; Information added by Drupal.org packaging script on 2014-05-05
+version = "7.x-1.0-beta1+49-dev"
+core = "7.x"
+project = "birthdays"
+datestamp = "1399293229"
+

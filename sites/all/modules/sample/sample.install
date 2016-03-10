@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * Implements hook_install().
+ */
+function sample_install() {
+  // Create a default scheduled job.
+  $job = array(
+    'type' => 'sample_mail',
+    'period' => 60,
+    'crontab' => '* * * * *',
+    'periodic' => TRUE,
+  );
+  JobScheduler::get('sample_mail')->set($job);
+}

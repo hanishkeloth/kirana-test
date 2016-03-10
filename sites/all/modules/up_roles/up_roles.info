@@ -1,0 +1,10 @@
+name = userpoints roles
+description = 把用户积分与角色关联对应起来.
+core = 7.x
+dependencies[] = userpoints
+; Information added by drupal.org packaging script on 2012-07-09
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "up_roles"
+datestamp = "1341795238"
+

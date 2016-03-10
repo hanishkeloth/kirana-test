@@ -1,0 +1,16 @@
+name = Amazon Simple Email Service
+description = Integrate with Amazon SES
+core = 7.x
+configure = admin/config/aws-settings
+
+dependencies[] = libraries
+dependencies[] = awssdk
+
+files[] = includes/amazon_ses.mail.inc
+
+; Information added by Drupal.org packaging script on 2015-03-12
+version = "7.x-1.0-alpha2+0-dev"
+core = "7.x"
+project = "amazon_ses"
+datestamp = "1426141799"
+

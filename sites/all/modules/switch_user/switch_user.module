@@ -1,0 +1,127 @@
+<?php
+
+/**
+ * @file
+ * Allows the admin to switch to any user in the system.
+ */
+
+/**
+ * Attempts to load and replace the current user object.
+ *
+ * @param int $user_id
+ *   The ID of the user in the current installation.
+ *
+ * @return bool
+ *   The success or failure of the switch.
+ */
+function switch_user_exec($user_id = NULL) {
+  if (is_numeric($user_id)) {
+    $user_loaded = user_load($user_id);
+
+    if ($user_loaded->uid > 0) {
+      global $user;
+      $user = $user_loaded;
+
+      if (isset($_GET['destination'])) {
+        drupal_goto($_GET['destination']);
+      }
+
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function switch_user_form_alter(&$form, &$form_state, $form_id) {
+  if ($form['#id'] == 'user-admin-account') {
+    foreach ($form['accounts']['#options'] as $user_id => $account) {
+      if (!isset($account['operations']['#links'])) {
+        $edit = $account['operations']['data'];
+
+        if (isset($edit['#type'])) {
+          unset($edit['#type']);
+        }
+        if (isset($edit['#title'])) {
+          $edit['title'] = $edit['#title'];
+          unset($edit['#title']);
+        }
+        if (isset($edit['#href'])) {
+          $edit['href'] = $edit['#href'];
+          unset($edit['#href']);
+        }
+        if (isset($edit['#options']) &&
+          isset($edit['#options']['query'])) {
+          $edit['query'] = $edit['#options']['query'];
+          unset($edit['#options']);
+        }
+
+        $form['accounts']['#options'][$user_id]['operations']['data'] = array(
+          '#theme'      => 'links__user_operations',
+          '#attributes' => array(
+            'class' => array(
+              'links',
+              'inline',
+            ),
+          ),
+          '#links'      => array(
+            'edit'   => $edit,
+            'switch' => array(
+              'title'   => t('switch'),
+              'href'    => 'switch-user/' . $user_id,
+              'query' => array(
+                'destination' => 'admin/people',
+              ),
+            ),
+          ),
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_help().
+ */
+function switch_user_help($path, $arg) {
+  $output = '';
+
+  switch ($path) {
+    case 'admin/help#switch_user':
+      $output .= '<h2>' . t('Introduction') . '</h2>';
+      $output .= '<p>' . t('Current Maintainer') . ': <a href="http://drupal.org/user/2364270">PDNagilum</a> &lt;<a href="mailto:pdnagilum@gmail.com">pdnagilum@gmail.com</a>&gt;</p>';
+      $output .= '<p>This little module gives you the ability to switch to any user via the admin panel found at admin/people in Drupal 7. It adds an extra link in the operations-section called \'switch\'. Click it and you\'ll be logged in as that user.</p>';
+      $output .= '<p>You can also switch to a user by using a URL, switch-user/%uid. If you have the correct privileges the system will log you in as the given user.</p>';
+
+      return $output;
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function switch_user_menu() {
+  $items = array();
+
+  $items['switch-user'] = array(
+    'page callback'    => 'switch_user_exec',
+    'access arguments' => array('administer switch_user'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function switch_user_permission() {
+  return array(
+    'administer switch_user' => array(
+      'title'       => t('Administer Switch User'),
+      'description' => t('Perform administration tasks for Switch User'),
+    ),
+  );
+}

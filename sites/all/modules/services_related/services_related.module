@@ -1,0 +1,116 @@
+<?php
+/**
+ * Implements hook_permission().
+ */
+function services_related_permission() {
+  return array(
+    'attach file to node' =>  array(
+      'title' => t('attach file to node'),
+      'description' => t('attach file to node - with services '),
+    ),
+  );
+}
+ 
+/*
+ 
+so you just made an image with a post to your endpoint /file
+ 
+with
+{
+    "filename": "test.png",
+    "target_uri": "public://test.png",
+    "filemime": "image/png",
+    "file": "bac64encodestring"
+ 
+}
+ 
+and it gave you the fid in return COOL 
+ 
+ 
+help form http://pingv.com/blog/an-introduction-drupal-7-restful-services
+ 
+LETS ATTACH THAT TO A KNOWN NODE
+ 
+use GET to http://yoursite.com/yourendpoint/fileattach/retrieve?nid=[NID]&fid=[FID]
+ 
+ 
+MAKE THE IMAGE YOUR PROFILE PICTURE
+or to update a user profile just go with
+use GET to http://yoursite.com/yourendpoint/fileattach/retrieve?fid=[FID]&field=profile
+- or GET
+http://localhost/dnet/testend/fileattach/retrieve?fid=1&field=profile
+ 
+*/
+/**
+ * Implements of hook_services_resources().
+ */
+function services_related_services_resources() {
+  $api = array(
+    'wishary_related' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Using GET to attach file to node - see this module help permissionm required',
+          'callback' => '_services_related_node_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to node'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'nid',
+              'type' => 'int',
+              'description' => 'Node Id',
+              'source' => array('param' => 'nid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'fid',
+              'type' => 'int',
+              'description' => 'File id fid',
+              'source' => array('param' => 'fid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'type',
+              'type' => 'string',
+              'description' => 'check if profile is true later on the custom mname of a field but does not work yet ',
+              'source' => array('param' => 'field'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+ 
+  return $api;
+}
+ 
+ 
+ 
+/**
+ * Callback function for the  retrieve
+ */
+function _services_related_node_retrieve($fn, $nid, $fid, $field) {
+    $array=array();
+          
+  // Check for mad values
+  $nid = intval($nid);
+  $fid = intval($fid);
+
+
+  return $nid;
+  
+}
+
+ 

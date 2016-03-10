@@ -1,0 +1,130 @@
+<?php
+/**
+ * @file
+ * This file contains API documentation for the Facebook OAuth module. Note that
+ * all of this code is merely for example purposes, it is never executed when
+ * using the Facebook OAuth module.
+ */
+
+/**
+ * Hook to register new Facebook OAuth actions.
+ *
+ * The Facebook OAuth module includes two default actions. The "connect" action
+ * links a Facebook account with a Drupal user account. The "deauth" action
+ * revokes Drupal's Facebook access for a user and deassociates the accounts.
+ * You can write additional actions (such as data imports) by using this hook in
+ * your own modules.
+ *
+ * A full example of implementing this hook is included with the README.txt file
+ * included with the Facebook OAuth module.
+ *
+ * @return
+ *   An array of Facebook OAuth actions keyed by a unique action name. Each
+ *   action must specify at least the following properties:
+ *   - title: A title for the action.
+ *   - callback: The name of a function to execute after gaining access.
+ *   - permissions: A list of Facebook permissions to request.
+ *
+ * @see fboauth_fboauth_actions().
+ */
+function fboauth_likes_fboauth_actions() {
+  // Give each action a unique key, such as "fboauth_likes_photo_import" for a photo
+  // import. This function should begin with the name of your module.
+  $actions['fboauth_likes_like_import'] = array(
+    // Give you action a human-readable name. This will be used when showing
+    // the user a link to start this action.
+    'title' => t('Import my Facebook user likes'),
+
+    // Specify the name of your callback function that contains the import.
+    'callback' => 'fboauth_likes_fboauth_action_like_import',
+
+    // Specify permissions you need to do this action. See the Facebook API for
+    // a list: http://developers.facebook.com/docs/authentication/permissions/
+    'permissions' => array(
+      'user_likes', // Gets access to a user's photos.
+    ),
+
+    // Optionally specify a file that contains your callback function. If you
+    // put your callback function in the .module file, this is unnecessary.
+    // 'file' => 'fboauth_likes.inc',
+
+    // Optionally define a theme function for printing out your link (not
+    // including the "theme_" prefix). If you use this option, you must register
+    // this function in hook_theme(). If you don't use this option, the link
+    // will be output with the theme_fboauth_action() function or the automatic
+    // suggestion theme_fboauth_action__[action_name]().
+    // 'theme' => 'fboauth_likes_fboauth_action',
+  );
+  return $actions;
+}
+
+function fboauth_likes_fboauth_action_like_import($app_id, $access_token) {
+  // Query against the Facebook Graph API. See the Facebook API for a list of
+  // commands: http://developers.facebook.com/docs/reference/api/
+    $result = fboauth_graph_query('me/likes?fields=id,name', $access_token);
+  foreach ($result->data as $like) {
+    $name = explode(' ', $like->name);
+    $likes[$like->id] = array(
+      'uid' => $account->uid,
+      //'' => $like->id,
+      'name' => $like->name,
+      //'first_name' => $name[0],
+      //'last_name' => $name[1],
+      'changed' => REQUEST_TIME,
+    );
+    $likeids[] = $like->id;
+  }
+  
+  if (isset($likes)) {
+    // db_merge() queries don't support multiple rows. To reduce
+    // database hits, we will first query the db to find existing likes, 
+    // then build a multi-insert query.
+    $query = db_select('fboauth_likes', 'fif')
+      ->fields('fif', array('likeid', 'likeid'))
+      ->condition('uid', $account->uid);
+      //->condition('likeid', $likeids, 'IN')
+    $existing_likes = $query->execute()->fetchAllKeyed();
+
+    // Insert new likes.
+    if ($new_likes = array_diff_key($likes, $existing_likes)) {
+      $query = db_insert('fboauth_likes')
+        ->fields(array('uid', 'name', 'changed'));
+      foreach ($new_likes as $record) {
+        $query->values($record);
+      }
+      $query->execute();
+    }
+
+    if (variable_get('fboauth_extras_update', 1)) {    
+      // Update like entries. Unforunately, we need db query per row.
+      if ($extant_likes = array_intersect_key($likes, $existing_likes)) {
+        foreach ($extant_likes as $record) {
+          $num_updated = db_merge('fboauth_likes')
+            ->fields(array(
+            'name' => $record['name'],
+            //'first_name' => $record['first_name'],
+            //'last_name' => $record['last_name'],
+            'changed' => REQUEST_TIME))
+            ->condition('likeid', $record['likeid'])
+            ->condition('uid', $account->uid)
+            ->execute();
+        }
+        // Delete likes that user has unlikeed.
+        if ($extinct_likes = array_diff_key($existing_likes, $extant_likes)) {
+          $num_deleted = db_delete('fboauth_likes')
+            ->condition('likeid', $extinct_likes, 'IN')
+            ->execute();
+        }
+      }
+    }
+  }
+  
+  // Optionally set a completion or error message.
+  drupal_set_message(t('Import complete!'));
+
+  // Optionally return a path to which the user will be redirected. If not set
+  // the path in the $_REQUEST['destination'] variable will be used. If there
+  // is no path at all specified, the user will be redirected to the homepage.
+  return 'import-complete';
+}
+

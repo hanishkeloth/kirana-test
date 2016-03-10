@@ -1,0 +1,12 @@
+<?php
+/**
+* Implements hook_entity_info_alter().
+*/
+function wishary_edit_form_user_profile_form_alter(&$form, $form_state, $form_id) {
+  $form['#submit'][] = 'wishary_edit_user_profile_form_submit';
+}
+
+function wishary_edit_user_profile_form_submit($form, &$form_state) {
+  global $user;
+  drupal_goto('user/' . $user->uid);
+}

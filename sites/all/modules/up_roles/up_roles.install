@@ -1,0 +1,39 @@
+<?php
+
+/**
+ * Implementation of hook_schema().
+ */
+function up_roles_schema() {
+  $schema = array();
+  $schema['userpoints_roles'] = array(
+    'description' => '存储用户角色积分的对应关系',
+    'fields' => array(
+      'rid' => array(
+        'description' => 'Role ID',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'low' => array(
+        'description' => 'Low limit',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'high' => array(
+        'description' => 'high limit',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+	),
+	'primary key' => array('rid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function up_roles_uninstall() {
+  db_query("DELETE FROM {variable} WHERE name like '%up_roles%'");
+}

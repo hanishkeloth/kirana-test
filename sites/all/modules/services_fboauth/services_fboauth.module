@@ -1,0 +1,279 @@
+<?php
+/**
+ * @file
+ * Creates a resource for services to authenticate or register user using
+ * fboauth.
+ */
+
+/**
+ * Implements hook_services_resources().
+ */
+function services_fboauth_services_resources() {
+  $resource = array(
+    'fboauth' => array(
+      'actions' => array(
+        'connect' => array(
+          'help' => 'Login a user for a new session via FBOAuth',
+          'callback' => 'services_fboauth_connect_login',
+          'args' => array(
+            array(
+              'name' => 'access_token',
+              'type' => 'string',
+              'description' => 'A valid Facebook access token',
+              'source' => 'data',
+              'optional' => FALSE,
+            ),
+          ),
+          'access callback' => 'services_access_menu',
+        ),
+      ),
+    ),
+  );
+  return $resource;
+}
+
+/**
+ * Allow FBOAUTH login or register via services.
+ *
+ * @param array $data
+ *   An associative array containing:
+ *   - access_token: a valid Facebook access token (not access code).
+ *     The requesting application must have already gone through the
+ *     process of requesting permissions, getting access code, requesting
+ *     access token, etc.
+ *
+ * @return object
+ *   A valid session object, just like _user_resource_login().
+ */
+function services_fboauth_connect_login($data) {
+  global $user;
+
+  //module_load_include('module', 'personalization', 'personalization');
+  // Include fboauth functions as required.
+  module_load_include('inc', 'fboauth', 'includes/fboauth.fboauth');
+  $access_token = $data['access_token'];
+
+  // Find Drupal user that corresponds with this Facebook user.
+  $fbuser = fboauth_graph_query('me', $access_token);
+  $fbuser = fboauth_graph_query('me', $access_token);
+  // Use fake email if user email not available.
+  if (empty($fbuser->email)) {
+    $fbuser->email = $fbuser->id . '@facebook.com';
+  };
+  $uid = fboauth_uid_load($fbuser->id);
+
+  //Track user sessions in app
+  /*module_load_include('inc', 'personalization', 'includes/personalization.cron');
+  if($uid){
+    _user_app_session_tracking($uid);
+  }*/
+   if (user_is_logged_in()) {
+    // User is already logged in.
+
+    fboauth_save($user->uid, $fbuser->id);
+     $return->sessid = session_id();
+      $return->session_name = session_name();
+      $return->token = drupal_get_token('services');
+      $return->fb_connected = $fbid;
+      $return->user = clone $user;
+    drupal_set_message(t("You've connected your account with Facebook."));
+    return $return;
+  }
+  if ($uid && $account = user_load($uid)) {
+    return services_fboauth_login_user($account);
+  }
+  elseif (!empty($fbuser->email) && ($account = user_load_by_mail($fbuser->email))) {
+    fboauth_save($account->uid, $fbuser->id);
+    return services_fboauth_login_user($account);
+  }
+  // Register a new user only if allowed.
+  elseif (variable_get('user_register', 1)) {
+    $account = fboauth_create_user($fbuser);
+    // Load the account fresh just to have a fully-loaded object.
+    $account = user_load($account->uid);
+    if ($account->status == 0) {
+      _user_mail_notify('register_pending_approval', $account);
+    }
+
+    $result = fboauth_graph_query('me/friends', $access_token);
+  foreach ($result->data as $friend) {
+    $name = explode(' ', $friend->name);
+    $friends[$friend->id] = array(
+      'uid' => $account->uid,
+      'fbid' => $friend->id,
+      'name' => $friend->name,
+      'first_name' => $name[0],
+      'last_name' => $name[1],
+      'changed' => REQUEST_TIME,
+    );
+    $fbids[] = $friend->id;
+  }
+
+  if (isset($friends)) {
+    // db_merge() queries don't support multiple rows. To reduce
+    // database hits, we will first query the db to find existing friends,
+    // then build a multi-insert query.
+    $query = db_select('fboauth_friends', 'fif')
+      ->fields('fif', array('fbid', 'fbid'))
+      ->condition('uid', $account->uid);
+      //->condition('fbid', $fbids, 'IN')
+    $existing_friends = $query->execute()->fetchAllKeyed();
+
+    // Insert new friends.
+    if ($new_friends = array_diff_key($friends, $existing_friends)) {
+      $query = db_insert('fboauth_friends')
+        ->fields(array('uid', 'fbid', 'name', 'first_name', 'last_name', 'changed'));
+      foreach ($new_friends as $record) {
+        $query->values($record);
+      }
+      $query->execute();
+    }
+
+    if (variable_get('fboauth_extras_update', 1)) {
+      // Update friend entries. Unforunately, we need db query per row.
+      if ($extant_friends = array_intersect_key($friends, $existing_friends)) {
+        foreach ($extant_friends as $record) {
+          $num_updated = db_merge('fboauth_friends')
+            ->fields(array(
+            'name' => $record['name'],
+            'first_name' => $record['first_name'],
+            'last_name' => $record['last_name'],
+            'changed' => REQUEST_TIME))
+            ->condition('fbid', $record['fbid'])
+            ->condition('uid', $account->uid)
+            ->execute();
+        }
+        // Delete friends that user has unfriended.
+        if ($extinct_friends = array_diff_key($existing_friends, $extant_friends)) {
+          $num_deleted = db_delete('fboauth_friends')
+            ->condition('fbid', $extinct_friends, 'IN')
+            ->execute();
+        }
+      }
+    }
+  }
+
+$query = db_select('fboauth_users', 'u');
+$query->fields('u', array('uid'));
+$query->innerJoin('fboauth_friends', 'f', "f.fbid = u.fbid AND f.uid = {$account->uid}");
+$results = $query->execute();
+$flag = flag_get_flag('follow');
+foreach ($results as $result) {
+ $flag->flag('flag', $result['uid'], user_load($account->uid), TRUE);
+}
+ $result = fboauth_graph_query('me/likes?fields=id,name', $access_token);
+  foreach ($result->data as $like) {
+    $name = explode(' ', $like->name);
+    $likes[$like->id] = array(
+      'uid' => $account->uid,
+      //'' => $like->id,
+      'name' => $like->name,
+      //'first_name' => $name[0],
+      //'last_name' => $name[1],
+      'changed' => REQUEST_TIME,
+    );
+    $likeids[] = $like->id;
+  }
+
+  if (isset($likes)) {
+    // db_merge() queries don't support multiple rows. To reduce
+    // database hits, we will first query the db to find existing likes,
+    // then build a multi-insert query.
+    $query = db_select('fboauth_likes', 'fif')
+      ->fields('fif', array('likeid', 'likeid'))
+      ->condition('uid', $account->uid);
+      //->condition('likeid', $likeids, 'IN')
+    $existing_likes = $query->execute()->fetchAllKeyed();
+
+    // Insert new likes.
+    if ($new_likes = array_diff_key($likes, $existing_likes)) {
+      $query = db_insert('fboauth_likes')
+        ->fields(array('uid', 'name', 'changed'));
+      foreach ($new_likes as $record) {
+        $query->values($record);
+      }
+      $query->execute();
+    }
+
+    if (variable_get('fboauth_extras_update', 1)) {
+      // Update like entries. Unforunately, we need db query per row.
+      if ($extant_likes = array_intersect_key($likes, $existing_likes)) {
+        foreach ($extant_likes as $record) {
+          $num_updated = db_merge('fboauth_likes')
+            ->fields(array(
+            'name' => $record['name'],
+            //'first_name' => $record['first_name'],
+            //'last_name' => $record['last_name'],
+            'changed' => REQUEST_TIME))
+            ->condition('likeid', $record['likeid'])
+            ->condition('uid', $account->uid)
+            ->execute();
+        }
+        // Delete likes that user has unlikeed.
+        if ($extinct_likes = array_diff_key($existing_likes, $extant_likes)) {
+          $num_deleted = db_delete('fboauth_likes')
+            ->condition('likeid', $extinct_likes, 'IN')
+            ->execute();
+        }
+      }
+    }
+  }
+$result = db_query('SELECT f.name
+FROM {fboauth_likes} f WHERE f.uid = :uid ', array(':uid' => $account->uid));
+// Result is returned as a iterable object that returns a stdClass object on each iteration
+$friend_ids_arr = array();
+foreach ($result as $record) {
+$friend_ids_arr[] = $record->name;
+//print$record->name. ",");
+}
+$friend_likes = implode("," , $friend_ids_arr);
+ //$friend_likes;
+ $profile =  profile2_load_by_user($account->uid, $type_name = 'gender');
+   $profile->field_likes['und'][0]['value'] =  $friend_likes;
+   profile2_save($profile);
+    return services_fboauth_login_user($account);
+  }
+  else {
+    return services_error('Your Facebook e-mail address does not match any existing accounts. If you have an account, you must first log in before you can connect your account to Facebook. Creation of new accounts on this site is disabled.');
+  }
+}
+
+/**
+ * A helper function to authenticate a user.
+ *
+ * @param object $account
+ *   A user account object to authenticate.
+ *
+ * @return object
+ *   A valid session object or error is accunt is blocked.
+ */
+function services_fboauth_login_user($account) {
+  global $user;
+  $user = $account;
+   $result = db_query("SELECT fbid FROM {fboauth_users} WHERE uid = :uid", array(':uid' => $uid));
+   $fbid = $result->fetchField();
+  if(!strlen(trim($fbid))){
+  $fbid = 'NONE';
+  }
+  if ($account->status) {
+    // Much of the login logic was taken from _user_resource_login().
+    if ($user->uid != 0) {
+      user_login_finalize();
+      $return = new stdClass();
+      $return->sessid = session_id();
+      $return->session_name = session_name();
+      $return->token = drupal_get_token('services');
+      $return->fb_connected = $fbid;
+      $return->user = clone $user;
+      services_remove_user_data($return->user);
+      // save the current session to the db
+      drupal_save_session($return->user);
+      drupal_session_commit();
+      $uid = fboauth_uid_load($fbuser->id);
+      return $return;
+    }
+  }
+  else {
+    services_error('The username ' . $account->name . ' has not been activated or is blocked.', '401');
+  }
+}

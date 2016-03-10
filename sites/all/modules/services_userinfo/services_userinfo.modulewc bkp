@@ -1,0 +1,424 @@
+<?php
+/*
+* Implementation of hook_menu().
+
+*/
+
+function services_userinfo_menu() {
+
+    $menuitems['menudemo'] = array(
+
+    'title' => 'My Menu',
+
+    'page callback' => 'menudemo_mymenu_page_callback',
+
+    'access callback' => TRUE,
+
+    'type' => MENU_CALLBACK,
+
+    );
+
+    return $menuitems;
+
+}
+
+function menudemo_mymenu_page_callback() {
+//echo 1;exit;
+
+   // return 'My Menu URL was hit';
+  // _services_userinfo_myroom_retrieve();
+ // global $user;
+ $nid =arg(1);
+ echo $nid;
+ 
+ 
+//echo $nid;exit;
+// echo arg(0);exit;
+ module_load('inc','services_userinfo','services_userinfo.resource');
+ //module_load('inc','services_userinfo','services_postinfo.resource');
+  services_postinfo_retreive_items($nid);
+
+}
+
+/**
+* Implements of hook_services_resources().
+*/
+function services_userinfo_services_resources() {
+  $api = array(
+    'userinfo' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieves user room info',
+		  'file' => array('type' => 'inc', 'module' => 'services_userinfo', 'name' => 'services_userinfo.resource'),
+          'callback' => '_services_userinfo_resource_myroom',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+            array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+      ),
+    ),
+	'postinfo' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieves information related to posts',
+		 // 'file' => array('type' => 'inc', 'module' => 'services_userinfo', 'name' => 'services_userinfo.resource'),
+          'callback' => '_services_postinfo_resource',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+            array(
+              'name' => 'nid',
+              'type' => 'int',
+              'description' => 'Node Id of the Node',
+              'source' => array('param' => 'nid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+      ),
+    ),
+	'addlike' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Adds like count to posts',
+		  //'file' => array('type' => 'inc', 'module' => 'services_userinfo', 'name' => 'services_userinfo.resource'),
+          'callback' => '_services_addlike_resource',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+            array(
+              'name' => 'nid',
+              'type' => 'int',
+              'description' => 'Node Id of the Node',
+              'source' => array('param' => 'nid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+      ),
+    ),
+	'addfollowers' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Logged in user follows another user',
+		  //'file' => array('type' => 'inc', 'module' => 'services_userinfo', 'name' => 'services_userinfo.resource'),
+          'callback' => '_services_addfollowers_resource',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+           array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+      ),
+    ),
+	
+	'unfollow' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Logged in user can unfollow another user',
+		  //'file' => array('type' => 'inc', 'module' => 'services_userinfo', 'name' => 'services_userinfo.resource'),
+          'callback' => '_services_unfollow_resource',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+           array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+      ),
+    ),
+	
+  );
+  return $api;
+}
+/**
+* Callback function for add like info retrieve
+*/
+function _services_addlike_resource($fn,$nid,$uid) {
+  // Check for mad values
+  $nid = intval($nid);
+  $uid = intval($uid);
+  return
+services_addlike_retrieve($nid,$uid);
+}
+
+/**
+* Callback function for add like with posts
+*/
+function services_addlike_retrieve($nid,$uid)
+{	
+	global $user;
+	if($uid)
+		$userid = $uid;
+	else
+		$userid =$user->uid;
+	$num_updated = db_insert('votingapi_vote') // Table name no longer needs {}
+		->fields(array(
+			
+			'entity_type'=>'node',
+			'entity_id'=>$nid,
+			'value' => 1,
+			'value_type'=>'points',
+			'tag'=>'vote',
+			'uid' => $userid,
+			'timestamp'=>$_SERVER['REQUEST_TIME'],
+			'vote_source'=>$_SERVER['REMOTE_ADDR'],
+		))
+		->execute();
+	return $nid;
+}
+	
+/**
+* Callback function for adding followers
+*/
+function _services_addfollowers_resource($fn,$uid) {
+  // Check for mad values
+   $uid = intval($uid);
+  return
+services_addfollowers_retrieve($uid);
+}
+
+/**
+* Callback function for adding followers
+*/
+function services_addfollowers_retrieve($uid)
+{	
+	global $user;
+	if ($user->uid) {
+   
+    $arg1 = $uid;
+    
+    
+    if (is_numeric($arg1)) {
+     
+        $bids = db_select('pinboard_boards')
+        ->fields('pinboard_boards', array('bid'))
+        ->condition('uid', $arg1, '=')
+        ->execute()->fetchCol();
+        if (count($bids)) foreach ($bids as $bid) {
+          db_delete('pinboard_follow')
+          ->condition('uid', $user->uid)
+          ->condition('aid', $arg1)
+          ->condition('pid', $bid)
+          ->execute();
+          $query = db_insert('pinboard_follow')
+          ->fields(array('uid', 'aid', 'pid', 'timestamp'));
+          $query->values(array(
+            'uid' => $user->uid,
+            'aid' => $arg1,
+            'pid' => $bid,
+            'timestamp' => time(),
+          ));
+          $query->execute();
+        }
+      
+    }
+    
+   return $uid;
+  } else {
+    return services_error(t('Anonymous user yields no result.'), 401);
+  }
+
+}
+/**
+* Callback function for adding followers
+*/
+function _services_unfollow_resource($fn,$uid) {
+  // Check for mad values
+   $uid = intval($uid);
+  return
+services_unfollow_retrieve($uid);
+}
+
+/**
+* Callback function for adding followers
+*/
+function services_unfollow_retrieve($uid)
+{	
+	global $user;
+	if ($user->uid) {
+   
+    $arg1 = $uid;
+    
+    
+    if (is_numeric($arg1)) {
+     db_delete('pinboard_follow')
+        ->condition('uid', $user->uid)
+        ->condition('aid', $arg1)
+        ->execute(); 
+    }
+    
+   return $uid;
+  } else {
+    return services_error(t('Anonymous user yields no result.'), 401);
+  }
+
+}
+	
+	
+	
+/**
+* Callback function for my room info retrieve
+*/
+function _services_postinfo_resource($fn,$nid) {
+  // Check for mad values
+  $nid = intval($nid);
+  return
+services_postinfo_retreive_items($nid);
+}
+/**
+* Gets My Room Info
+*/
+function services_postinfo_retreive_items($nid) {
+  // Compose query
+  global $user;
+  if($user->uid) {
+    if ($nid) { 
+		$node = node_load($nid);
+		//print_r($node);//exit;
+		//$result->nid =$node->nid;
+		
+		$query = db_select('votingapi_vote', 'v');
+		$query->addExpression('COUNT(v.uid)');
+		$query->condition('v.entity_type', 'node', '=');
+		$query->condition('v.entity_id', $node->nid, '=');
+		$query->condition('v.uid', 0, '>');
+		$count = $query->execute()->fetchCol();
+		$node->like = $count[0];
+		//$node->commentlike =array();
+		
+		// $nid = $variables['node']->nid;
+    $comments = db_query('SELECT cid FROM {comment} WHERE nid = :nid', array( ':nid' => $nid, ))->fetchAll();
+	//print_r($num_comments);exit;
+	foreach ($comments as $comment){
+		$query = db_select('votingapi_vote', 'v');
+		$query->addExpression('COUNT(v.uid)');
+		$query->condition('v.entity_type', 'comment', '=');
+		$query->condition('v.entity_id', $comment->cid, '=');
+		$query->condition('v.uid', 0, '>');
+		$count = $query->execute()->fetchCol();
+		$node->commentlike[$comment->cid]=$count[0];
+
+		
+	}
+		/*
+		$query = db_select('comment', 'c');
+		//$query->addExpression('c.cid');
+		  $query->addField('c', 'cid');
+		$query->condition('c.nid',  $node->nid, '=');
+		$comments = $query->execute()->fetchAll();*/
+	//	print_r($comments);exit;
+		
+		
+		//$node_view = node_view($node);
+		
+		//$node_view['comments'] = comment_node_page_additions($node);
+		//echo drupal_render($node_view);
+		//print_r($node_view);exit;
+		/*$sql = "SELECT cid FROM {comment} WHERE nid=%d ORDER BY timestamp DESC";
+
+$resource = db_query($sql, $nid);
+
+print_r($resource);exit;*/
+/*
+foreach($resource as $rows) {
+ // print_r(comment_render( $node->nid, $row['cid'] ));exit;
+ $query = db_select('votingapi_vote', 'v');
+		$query->addExpression('COUNT(v.uid)');
+		$query->condition('v.entity_type', 'comment', '=');
+		$query->condition('v.entity_id', $nid, '=');
+		$query->condition('v.uid', 0, '>');
+		$count = $query->execute()->fetchCol();
+		$node->like = $count[0];
+		
+}*/
+		
+		//$node->comments = $node_view;
+
+	//	print_r($node);exit;
+		return $node;
+		}
+	}
+    else {
+      // return '0';
+	   return services_error(t('Anonymous user yields no result.'), 401);
+    }
+}
+?>

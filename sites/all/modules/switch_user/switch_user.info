@@ -1,0 +1,11 @@
+name = Switch User
+description = Allows the admin to switch to any user in the system.
+core = 7.x
+package = Administration
+
+; Information added by drupal.org packaging script on 2013-02-11
+version = "7.x-1.0"
+core = "7.x"
+project = "switch_user"
+datestamp = "1360591412"
+

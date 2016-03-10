@@ -1,0 +1,5 @@
+name = Drupal Test Clone node
+description = Clone node.
+package = TEST 
+core = 7.x   
+

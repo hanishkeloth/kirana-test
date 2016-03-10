@@ -1,0 +1,149 @@
+<?php
+/**
+ * @file
+ * Node Lazyloader Module
+ *
+ * @author: Daniel Honrade http://drupal.org/user/351112
+ *
+ * Note: Obviously, this will not work unless the javascript is on.
+ *
+ */
+define('NODELAZYLOADER_PATH', base_path() . drupal_get_path('module', 'nodelazyloader'));
+
+
+/**
+ * Implements hook_init().
+ *
+ * Sets the defaults global
+ *
+ */
+function nodelazyloader_init() {
+
+  global $_nodelazyloader_defaults;
+  global $_nodelazyloader_set;
+
+  $_nodelazyloader_defaults = array(
+    'enabled'       => 1,          // always enabled by default
+    'excludednodes' => '',         // node IDs to be excluded
+    'class'         => 'content',  // the div class of your theme's node content
+    'distance'      => 0,          // 0 pixel distance to the viewable browser window before the actual node is loaded
+    'loader_icon'   => 7,          // default loader icon
+    'exclude'       => '',         // pages to exclude from node lazyloader
+  );
+
+  $_nodelazyloader_set = variable_get('nodelazyloader', $_nodelazyloader_defaults);
+}
+
+
+/**
+ * Implements hook_menu().
+ *
+ */
+function nodelazyloader_menu() {
+
+  $items = array();
+
+  $items['admin/config/content/nodelazyloader'] = array(
+    'title' => 'Node Lazyloader',
+    'page callback' => 'drupal_get_form',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer nodelazyloader'),
+    'page arguments' => array('nodelazyloader_admin', NULL),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'nodelazyloader.admin.inc',
+    'description' => 'Configure Node Lazyloader',
+  );
+  $items['nodelazyloader'] = array(
+    'title' => 'Nodes using lazyloader',
+    'page callback' => 'nodelazyloader_get_node_content',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+
+/**
+ * Implements hook_perm().
+ *
+ */
+function nodelazyloader_permission() {
+
+  return array(
+    'administer nodelazyloader' => array(
+      'title' => t('Administer Node Lazyloader'),
+      'description' => t('Perform administration tasks for Node Lazyloader.'),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_node_view().
+ * template_preprocess_node()
+ *
+ */
+function nodelazyloader_preprocess_node(&$vars) {
+
+  global $_nodelazyloader_set;
+
+  $settings = $_nodelazyloader_set;
+
+  if ($settings['enabled'] && !drupal_match_path($_GET['q'], $settings['exclude'])) {
+    $excluded_nodes_array = explode(',', preg_replace('/ /', '', $settings['excludednodes']));
+    $vars['content'] = in_array($vars['nid'], $excluded_nodes_array) ? $vars['content']: '';
+  }
+}
+
+
+/**
+ * Custom function
+ *
+ * - gets data from database
+ *
+ */
+function nodelazyloader_get_node_content() {
+
+  $nid  = $_GET['nid'];
+  $mode = $_GET['mode']; // full/teaser
+
+  if ($nid) {
+    $node = node_load($nid);
+    node_build_content($node, $mode);
+    drupal_json_output(render($node->content));
+  }
+}
+
+
+
+/**
+ * Implements hook_process_html().
+ *
+ * Initialize the trigger for nodelazyloader
+ *
+ */
+function nodelazyloader_process_html(&$vars) {
+
+  global $_nodelazyloader_set;
+
+  $settings = $_nodelazyloader_set;
+
+  if ($settings['enabled'] && !drupal_match_path($_GET['q'], $settings['exclude'])) {
+
+    $icon = ($settings['loader_icon'] != 0) ? NODELAZYLOADER_PATH . '/loader/loader-' . $settings['loader_icon'] . '.gif': '';
+
+    $excluded_nodes_array = explode(',', preg_replace('/ /', '', $settings['excludednodes']));
+    $excluded_nodes = json_encode($excluded_nodes_array);
+
+    $requesting_page = json_encode(arg());
+
+    $nodelazyloader_init = '
+      <script type="text/javascript">
+        jQuery(function($){
+          $(".node").nodelazyloader({requestingPage: ' . $requesting_page . ', excludedNodes: ' . $excluded_nodes . ', contentClass: "' . trim($settings['class']) . '", distance: ' . trim($settings['distance']) . ', icon: "' . $icon . '" });
+        });
+      </script>';
+
+    $vars['page_bottom'] .= $nodelazyloader_init;
+  }
+}

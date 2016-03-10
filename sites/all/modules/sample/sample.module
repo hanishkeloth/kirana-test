@@ -1,0 +1,38 @@
+<?php
+
+function sample_menu(){
+  $items['sample_mail'] = array(
+      'description' => 'Sample Mail',
+      'page callback' => '_sample_mail_check',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+function _sample_mail_check(){
+  $user = user_load('2287');
+  $module = 'content_notification';
+  $key = 'notification_mail';
+  $email = 'vimalanswamy@gmail.com';
+  $language = language_default();
+  $params = array();
+  $params['account'] = $user;
+  $params['message'] = 'Testing sample mail';
+  $from = variable_get('site_mail', ini_get('sendmail_from'));
+  $send = TRUE;
+  $mail_sent = drupal_mail($module, $key, $email, $language, $params, $from, $send);
+  echo "<pre>";print_r($mail_sent);exit;
+}
+
+/**
+ * Implements hook_cron_job_scheduler_info().
+ */
+function sample_cron_job_scheduler_info() {
+  $info = array();
+  $info['sample_mail'] = array(
+    'worker callback' => '_sample_mail_check',
+  );
+  return $info;
+}

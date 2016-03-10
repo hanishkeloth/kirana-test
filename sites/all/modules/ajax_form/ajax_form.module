@@ -1,0 +1,570 @@
+<?php
+
+function ajax_form_menu()
+{
+	$menu['style'] = array
+	(
+		'title' => 'Style Quiz',
+		'description' => 'Style Quiz',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('ajax_form_multistep_form'),
+		'access callback' => 'user_is_logged_in',
+	);
+		$menu['style-main'] = array
+	(
+	  'type' => MENU_CALLBACK,
+      'page callback' => 'guest_callback_guest_page',
+      'access callback' => 'user_is_logged_in', 
+	);
+ 
+	return $menu;
+}
+ 
+function ajax_form_multistep_form($form, &$form_state)
+{
+	// If $form_state['step'] is not set, we set it to 1
+	$form_state['step'] = isset($form_state['step']) ? $form_state['step'] : 1;
+ 
+	// Add a wrapper div that will be used by the Form API to update the form using AJAX
+	$form['#prefix'] = '<div id="ajax_form_multistep_form">';
+	$form['#suffix'] = '</div>';
+ global $user;
+ $user_full = user_load($user->uid);
+ $uid =$user->uid;
+ $gender = $user_full->field_gender_profile['und']['0']['value'];
+ if($gender == 'Male') {
+	// Depending on which step of the form we are on, we output different form fields
+	switch($form_state['step'])
+	{
+		// Step 1
+		case 1:
+			$default_value = '';
+			if(isset($form_state['values']['step_1']))
+			{
+				$default_value = $form_state['values']['step_1'];
+			}
+			elseif(isset($form_state['storage']['step_1']))
+			{
+				$default_value = $form_state['storage']['step_1'];
+			}
+ 
+			$form['step_1'] = array
+			(
+				'#type' => 'radios',
+                '#required' => TRUE,
+                '#options' => array('MA' => '<img src="sites/all/themes/xingyuyuan/images/men-step1-a.jpg" class="choose-a" />', 'MB' => '<img src="sites/all/themes/xingyuyuan/images/men-step1-b.jpg" class="choose-b"  />'),
+	);
+			
+			break;
+ 
+		// Step 2
+		case 2:
+			$default_value = '';
+			if(isset($form_state['values']['step_2']))
+			{
+				$default_value = $form_state['values']['step_2'];
+			}
+			elseif(isset($form_state['storage']['step_2']))
+			{
+				$default_value = $form_state['storage']['step_2'];
+			}
+ 
+			$form['step_2'] = array
+			(
+				'#type' => 'radios',
+               '#required' => TRUE,
+                '#options' => array('A' => '<img src="sites/all/themes/xingyuyuan/images/men-step2-a.jpg" class="choose-a" />', 'B' => '<img src="sites/all/themes/xingyuyuan/images/men-step2-b.jpg" class="choose-b" />'),
+
+			);
+ 
+			break;
+ 
+		// Step 3
+		case 3:
+			$default_value = '';
+			if(isset($form_state['values']['step_3']))
+			{
+				$default_value = $form_state['values']['step_3'];
+			}
+			elseif(isset($form_state['storage']['step_3']))
+			{
+				$default_value = $form_state['storage']['step_3'];
+			}
+ 
+			$form['step_3'] = array
+			(
+				'#type' => 'radios',
+                '#required' => TRUE,
+                '#options' => array('A' => '<img src="sites/all/themes/xingyuyuan/images/men-step3-a.jpg" class="choose-a" />', 'B' => '<img src="sites/all/themes/xingyuyuan/images/men-step3-b.jpg" class="choose-b" />'),
+
+			);
+ 
+			break;
+	}
+	} else if($gender == 'Female') {
+	
+		// Depending on which step of the form we are on, we output different form fields
+	switch($form_state['step'])
+	{
+		// Step 1
+		case 1:
+			$default_value = '';
+			if(isset($form_state['values']['step_1']))
+			{
+				$default_value = $form_state['values']['step_1'];
+			}
+			elseif(isset($form_state['storage']['step_1']))
+			{
+				$default_value = $form_state['storage']['step_1'];
+			}
+ 
+			$form['step_1'] = array
+			(
+				'#type' => 'radios',
+                '#required' => TRUE,
+                '#options' => array('FA' => '<img src="sites/all/themes/xingyuyuan/images/women-step1-a.jpg" class="choose-a"  />', 'FB' => '<img src="sites/all/themes/xingyuyuan/images/women-step1-b.jpg" class="choose-b" />'),
+	);
+			
+			break;
+ 
+		// Step 2
+		case 2:
+			$default_value = '';
+			if(isset($form_state['values']['step_2']))
+			{
+				$default_value = $form_state['values']['step_2'];
+			}
+			elseif(isset($form_state['storage']['step_2']))
+			{
+				$default_value = $form_state['storage']['step_2'];
+			}
+ 
+			$form['step_2'] = array
+			(
+				'#type' => 'radios',
+                '#required' => TRUE,
+                '#options' => array('A' => '<img src="sites/all/themes/xingyuyuan/images/women-step2-a.jpg" class="choose-a" />', 'B' => '<img src="sites/all/themes/xingyuyuan/images/women-step2-b.jpg" class="choose-b" />'),
+
+			);
+ 
+			break;
+ 
+		// Step 3
+		case 3:
+			$default_value = '';
+			if(isset($form_state['values']['step_3']))
+			{
+				$default_value = $form_state['values']['step_3'];
+			}
+			elseif(isset($form_state['storage']['step_3']))
+			{
+				$default_value = $form_state['storage']['step_3'];
+			}
+ 
+			$form['step_3'] = array
+			(
+			    '#type' => 'radios',
+                '#required' => TRUE,
+                '#options' => array('A' => '<img src="sites/all/themes/xingyuyuan/images/women-step3-a.jpg" class="choose-a" />', 'B' => '<img src="sites/all/themes/xingyuyuan/images/women-step3-b.jpg" class="choose-b" />'),
+                
+			);
+ 
+			break;
+	}
+	}
+ 
+	// Create a container for our buttons
+	$form['buttons'] = array
+	(
+		'#type' => 'container',
+	);
+	// If we are on step 1, we do not want a back button
+	if($form_state['step'] !== 1)
+	{
+		$form['buttons']['back'] = array
+		(
+			'#type' => 'submit',
+			'#value' => t('Back'),
+			// Setting #limit_validation_errors to an empty array
+			// ensures that the form fields are not validated when
+			// the back button is used. Otherwise, we will get errors
+			'#limit_validation_errors' => array(),
+			// We need to create a #submit function for this button, or else
+			// #limit_validation_errors has no effect. So we create a submit
+			// function specifically for this submit button.
+			'#submit' => array('ajax_form_multistep_form_back_submit'),
+			'#ajax' => array
+			(
+				// We pass in the wrapper we created at the start of the form
+				'wrapper' => 'ajax_form_multistep_form',
+				// We pass a callback function we will use later to render the form for the user
+				'callback' => 'ajax_form_multistep_form_ajax_callback',
+			),
+		);
+	}
+	// We only want a forward button if we are not on the last step of the form
+	if($form_state['step'] !== 3)
+	{
+		$form['buttons']['forward'] = array
+		(
+			'#type' => 'submit',
+			'#value' => t('Next'),
+			'#ajax' => array
+			(
+				// We pass in the wrapper we created at the start of the form
+				'wrapper' => 'ajax_form_multistep_form',
+				// We pass a callback function we will use later to render the form for the user
+				'callback' => 'ajax_form_multistep_form_ajax_callback',
+			),
+		);
+	}
+	// We only want a submit button if we are on the last step of the form
+	else
+	{
+		$form['buttons']['submit'] = array
+		(
+			'#type' => 'submit',
+			'#value' => t('Submit'),
+			'#ajax' => array
+			(
+				// We pass in the wrapper we created at the start of the form
+				'wrapper' => 'ajax_form_multistep_form',
+				// We pass a callback function we will use later to render the form for the user
+				//'callback' => 'ajax_form_multistep_form_ajax_callback',
+			),
+		);
+	}
+ 
+	return $form;
+}
+ 
+function ajax_form_multistep_form_validate($form, &$form_state)
+{
+	// First we set up a switch for each of our three steps
+	switch($form_state['step'])
+	{
+		case "1":
+			// Check that the first value is alphabetic
+			if (empty($form_state['values']['step_1'])) 
+			{
+				form_set_error('step_1', t('Select one option to begin quiz'));
+			}
+ 
+			break;
+ 
+		case "2":
+			// Check that the second value is numeric
+			if (empty($form_state['values']['step_2'])) 
+			{
+				form_set_error('step_2', t('Select one option to begin quiz'));
+			}
+ 
+			break;			
+ 
+		case "3":
+			// Check that the third value is alphanumeric
+			if (empty($form_state['values']['step_3'])) 
+			{
+				form_set_error('step_3', t('Select one option to begin quiz'));
+			}
+ 
+			break;
+ 
+	}
+}
+ 
+function ajax_form_multistep_form_back_submit($form, &$form_state)
+{
+	$form_state['step']--;
+ 
+	// Because this is a multi-step form, we always need to rebuild the form
+	// on every step, even after submission. This allows our form to be completely
+	// Ajaxified without ever requiring a page load.
+	$form_state['rebuild'] = TRUE;
+}
+ 
+function ajax_form_multistep_form_submit($form, &$form_state)
+
+{
+	// First we determine which step we are on, and save the
+	// submitted values to $form_state['storage']. This will
+	// allow our submitted values to persist.
+	$step = $form_state['step'];
+	$form_state['storage']['step_' . $step] = $form_state['values']['step_' . $step];
+ 
+	// Check to see if the next/forward button was clicked
+	if(isset($form_state['values']['forward']) && $form_state['values']['op'] == $form_state['values']['forward'])
+	{
+		// Increase the step by one, to move on to the next step
+		$form_state['step']++;
+	}
+	
+	// Check to see if the final step has been submitted
+	elseif(isset($form_state['values']['submit']) && $form_state['values']['op'] == $form_state['values']['submit'])
+	{
+		// Here we will collect the data and show the submitted values to the user in a message.
+		// In a real-world application of this form, you would use the submitted values to complete the
+		// purpose of the form - save them to the database and/or send an email and/or display something
+		// to the user etc. The following is just s simple example to show how the values can be used.
+		$items = array($form_state['storage']['step_1'], $form_state['storage']['step_2'], $form_state['storage']['step_3']);
+		//drupal_set_message(t('You submitted the following values:!values', array('!values' => theme('item_list', array('items' => $items)))));
+
+		
+		$styleQuizDefined = array(
+			'MBBA' => 110483,
+            'MBBB' => 110484,
+            'MBAA' => 110488,
+            'MBAB' => 110490,
+            'MABA' => 110491,
+            'MABB' => 110492,
+            'MAAA' => 110493,
+            'MAAB' => 110494,
+            'FBBB' => 110496,
+            'FBBA' => 110497,
+            'FBAB' => 110503,
+            'FBAA' => 110504,
+            'FABB' => 110505,
+            'FABA' => 110506,
+            'FAAB' => 110507,
+            'FAAA' => 110508
+			);
+		$styleUserSelection = $form_state['storage']['step_1']. $form_state['storage']['step_2']. $form_state['storage']['step_3'];
+
+		$nid = $styleQuizDefined[$styleUserSelection];
+//echo $styleQuizDefined[$styleUserSelection];
+//exit();
+
+        global $user;
+        $user = user_load($user->uid); // Make sure the user object is fully loaded
+        $uid =$user->uid;
+        $query = db_select('taxonomy_index', 't');
+        $query->fields('t', array('tid'));
+        $query->condition('nid', $nid);
+        $result = $query->execute();
+//$record = $result->fetchAssoc();
+ if ($result) {
+    while ($row = $result->fetchAssoc()) {
+    $flag = flag_get_flag('hashtag');
+    $flag->flag('flag',  $row['tid'], user_load($uid), TRUE);
+    }
+  }
+ $url= "style-main";
+ drupal_goto($url);
+
+		// The form has been completed, so we want to return the user to step 1
+		// as well as clear any saved values.
+		//$form_state['step'] = 1;
+		
+		//$form_state['storage'] = array();
+	}
+ //echo $form_state['values'];
+	//print_r($form_state['values']);
+	//exit();
+	// As in ajax_form_multistep_form_back_submit(), we need to set
+	// $form_state['rebuild'] to TRUE, in able to ensure that our
+	// our form is rebuilt, allowing for the multi-step process
+	$form_state['rebuild'] = TRUE;
+}
+ 
+function ajax_form_multistep_form_ajax_callback($form, &$form_state)
+{
+	return $form;
+}
+
+function guest_callback_guest_page(){
+  global $user;
+ $user_full = user_load($user->uid);
+ $uid =$user->uid;
+ $gender = $user_full->field_gender_profile['und']['0']['value'];
+//Condition -1 Followed wishes;
+$query = db_select('taxonomy_index', 'ti');
+$query->fields('ti', array('nid'));
+//$query->fields('n', array('type'));
+$query->innerJoin('node', 'n', 'ti.nid = n.nid');
+$query->condition('n.type','pin');
+/*$db_or = db_or();
+$db_or->condition('n.type', 'pin', '=');
+//$db_or->condition('n.type', 'expression', '=');
+$query->condition($db_or);*/
+if($gender == 'Male') {
+  $query->condition('n.title', '%men%', 'LIKE');
+  $query->condition('n.title', '%women%', 'NOT LIKE');
+  //$query->condition('n.title', '^(.)*([^o]|[^w]o)man(.)*$', 'REGEXP');
+} else if($gender == 'Female') {
+  $query->condition('n.title', '%women%', 'LIKE');
+  //$query->condition('n.title', '^(.)*(women)(.)*$', 'REGEXP');
+}
+
+$query->condition('n.type','pin');
+//If User is Test User get the hashtag ids from user_hashtags table
+if(in_array('Test users', $user_full->roles)){
+  $subquery = db_select('user_hashtags', 'uht');
+  $subquery->fields('uht', array('tid'));
+  $subquery->condition('uht.uid', $uid);
+}else{
+  $subquery = db_select('flagging', 'ff');
+  $subquery->fields('ff', array('entity_id'));
+  $subquery->condition('ff.uid', $uid);
+  $subquery->condition('ff.entity_type', 'taxonomy_term');
+}
+$query->condition('ti.tid', $subquery, 'IN');
+//$query->condition('ti.tid', '', '');
+$query->distinct();
+$query->range(0, 300);
+$result = $query->execute();
+$wishes = $result->fetchCol('nid');
+
+//$wishes = implode(',',$result);
+
+
+
+//condition 2 Random wishes
+
+
+$query = db_select('taxonomy_index', 'ti');
+$query->fields('ti', array('nid'));
+//$query->fields('n', array('type'));
+$query->innerJoin('node', 'n', 'ti.nid = n.nid');
+if($gender == 'Male') {
+  $query->condition('n.title', '%men%', 'LIKE');
+  $query->condition('n.title', '%women%', 'NOT LIKE');
+  //$query->condition('n.title', '^(.)*([^o]|[^w]o)man(.)*$', 'REGEXP');
+} else {
+  $query->condition('n.title', '%women%', 'LIKE');
+  //$query->condition('n.title', '^(.)*(women)(.)*$', 'REGEXP');
+}
+$query->condition('n.type','pin');
+//$query->condition('n.type','pin');
+$subquery = db_select('flagging', 'ff');
+$subquery->fields('ff', array('entity_id'));
+$subquery->condition('ff.uid', $uid,'!=');
+$subquery->condition('ff.entity_type', 'taxonomy_term');
+$query->condition('ti.tid', $subquery, 'IN');
+//$query->condition('ti.tid', '', '');
+$query->distinct();
+$query->range(0, 300);
+$query->orderRandom();
+$result = $query->execute();
+$random_wishes = $result->fetchCol('nid');
+
+
+
+
+
+
+
+$wishes_i_like = $wishes;
+$random_wishes = $random_wishes;
+$wishes_i_like = array_diff($wishes_i_like, $random_wishes);
+$random_wishes = array_diff($random_wishes, $wishes_i_like);
+
+shuffle($wishes_i_like);
+shuffle($random_wishes);
+
+//$expression_I_like =$expression_follow;
+//$wishes_activities = $activities;
+//$blog_i_like = $blogs;
+//$random_blogs = $random_blog;
+
+//$blog_i_like = array_diff($blog_i_like, $random_blogs);
+
+//$random_blogs = array_diff($random_blogs, $blog_i_like);
+
+
+
+$total_random_wishes = count($random_wishes);
+//echo '$total_random_wishes: '.$total_random_wishes.'<br>';
+$for_you = $for_you_temp = [];
+$current = $randomNext = $expression_next = $blog_next = $random_blog_next = $activity_next = 0;
+
+do {
+  // Get 5 records from wishes I like
+  if(isset($wishes_i_like[$current])) {
+    for($i = 0; $i < 7; $i++) {
+      if(isset($wishes_i_like[$current])) {
+        $for_you_temp[] =  $wishes_i_like[$current++];
+      }
+    }
+  } else {
+    $current++;
+  }
+
+  // Get one wish from random wishes
+  $for_you_temp[] =  $random_wishes[$randomNext++];
+  /*
+  // Get one expression from expression I like
+  //$expression_I_like = [20, 21, 22];
+  if(isset($expression_I_like[$expression_next])) {
+  $for_you_temp[] =  $expression_I_like[$expression_next++];
+  }
+
+  // Get 2 records from  activities
+  if(isset($wishes_activities[$activity_next])) {
+    for($i = 0; $i < 2; $i++) {
+      if(isset($wishes_activities[$activity_next])) {
+        $for_you_temp[] =  $wishes_activities[$activity_next++];
+      }
+    }
+  } else {
+    $current++;
+  }
+  */
+
+//$blog_i_like = [10, 11, 12];
+/*
+ // Get 5 records from blog I like
+  if(isset($blog_i_like[$blog_next])) {
+    for($i = 0; $i < 2; $i++) {
+      if(isset($blog_i_like[$blog_next])) {
+        $for_you_temp[] =  $blog_i_like[$blog_next++];
+      }
+    }
+  }
+*/
+  // Get one wish from random blog
+ // if(isset($random_blogs[$random_blog_next])) {
+  //$for_you_temp[] =  $random_blogs[$random_blog_next++];
+//}
+
+  shuffle($for_you_temp);
+
+  $for_you = array_merge($for_you, $for_you_temp);
+
+  $for_you_temp = [];
+
+} while ($randomNext < $total_random_wishes);
+//$offset=$_REQUEST['offset'];
+//$limit=$_REQUEST['limit'];
+//$for_you =array_unique($for_you);
+$for_you=array_slice($for_you,$offset,$limit);
+
+$out .= ''.'';
+                $out = '<div class="pin_page">';
+                $oute = '</div>';
+     $result = db_select('node', 'n')->condition('n.type', 'pin', '=')->extend('PagerDefault')->fields('n', array('nid'))->limit(10)->execute()->fetchCol();
+        $per_page = 10;
+        // shuffle($foryou_wishes_list);
+        $current_page = pager_default_initialize(count($for_you), $per_page);
+        // Split your list into page sized chunks
+  $chunks = array_chunk($for_you, $per_page, TRUE);
+
+$pp = theme('pager', array('quantity', count($for_you)));
+
+  // Initialise the pager
+
+  // Split your list into page sized chunks
+  $chunks = array_chunk($for_you, $per_page, TRUE);
+        $nodes = node_load_multiple($chunks[$current_page]);
+        $nodes = node_view_multiple($nodes);
+
+
+        if (!$pp or !isset($_GET['page']) or strpos($pp,'page='.$_GET['page']) or strpos($pp, '>'.($_GET['page'] + 1).'<'))
+            $out .= render($nodes);
+        $out .= $oute;
+        $out .= $pp;
+
+
+ return $out;
+    //drupal_json_output($for_you);
+    //exit();
+    }

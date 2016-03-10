@@ -1,0 +1,225 @@
+<?php
+/**
+ * @file
+ * Install & uninstall functions for Personalization module.
+ */
+
+/**
+ * Implementation of hook_schema
+ */
+
+function personalization_schema() {
+  $schema['hashtags_activities'] = array(
+    'description' => 'Tracking hashtags activities',
+    'fields' => array(
+      'hashtags_tracking_id' => array(
+        'description' => 'The primary identifier for a hashtags tracking.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'hashtag_tid' => array(
+        'description' => 'Hashtags terms tid',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'user_id' => array(
+        'description' => 'User Id',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'activity_date' => array(
+        'description' => 'Activity Date',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'hashtag_weight' => array(
+        'description' => 'Hashtags weightage based on the type of activity',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'activity_type' => array(
+        'description' => 'Type of activity (View/Like/Share/Shop/Search/Follow)',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'no_of_times' => array(
+        'description' => 'No.of times hashtags activity tracked',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+    ),
+    'primary key' => array('hashtags_tracking_id'),
+  );
+
+  $schema['hashtag_activities_daily_score'] = array(
+    'description' => 'Store hashtags activities daily total score',
+    'fields' => array(
+      'hashtags_daily_score_id' => array(
+        'description' => 'The primary identifier.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'hashtag_tid' => array(
+        'description' => 'Hashtags terms tid',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'user_id' => array(
+        'description' => 'User Id',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'activity_date' => array(
+        'description' => 'Activity Date',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'daily_score' => array(
+        'description' => 'Hashtags weightage based on the type of activity',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('hashtags_daily_score_id'),
+  );
+
+  $schema['hashtag_activities_cumulative_score'] = array(
+    'description' => 'Store hashtags activities cumulative score for each user id and hashtag id',
+    'fields' => array(
+      'cumulative_score_id' => array(
+        'description' => 'The primary identifier.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'hashtag_tid' => array(
+        'description' => 'Hashtags terms tid',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'user_id' => array(
+        'description' => 'User Id',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'cumulative_score' => array(
+        'description' => 'Cumulative Score',
+        'type' => 'numeric',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0,
+        'precision' => 6,
+        'scale' => 2,
+      ),
+    ),
+    'primary key' => array('cumulative_score_id'),
+  );
+
+  $schema['hashtag_activities_type_weight'] = array(
+    'description' => 'Store the weight of action type',
+    'fields' => array(
+      'type_weight_id' => array(
+        'description' => 'The primary identifier',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'action_type' => array(
+        'description' => 'Action Type(View/Share/Like/Shop/Search/Follow)',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+      ),
+      'weight' => array(
+        'description' => 'Weight of each activity type',
+        'type' => 'int',
+        'length' => '11',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('type_weight_id'),
+  );
+  $schema['color_weight'] = array(
+    'description' => 'Store color and category weight',
+    'fields' => array(
+      'color_weight_id' => array(
+        'description' => 'The primary identifier',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'color_id' => array(
+        'description' => 'Color tid',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'color_weight' => array(
+        'description' => 'Weight of each activity type',
+        'type' => 'numeric',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0,
+        'precision' => 6,
+        'scale' => 2,
+      ),
+    ),
+    'primary key' => array('color_weight_id'),
+  );
+
+  $schema['user_hashtags'] = array(
+    'description' => 'Store approx. number of #IDs for user',
+    'fields' => array(
+      'user_hashtags_id' => array(
+        'description' => 'The primary identifier',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'tid' => array(
+        'description' => 'Term tid',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'User Id',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('user_hashtags_id'),
+  );
+
+  $schema['users_sessions_tracking'] = array(
+    'description' => 'Store users sessions detail each time user opens an app.',
+    'fields' => array(
+      'sessions_id' => array(
+        'description' => 'The primary identifier',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'Logged in user id',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'timestamp' => array(
+        'description' => 'Timestamp of each login',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'no_of_times_access' => array(
+        'description' => 'No. of times user accessed',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+    ),
+    'primary key' => array('sessions_id'),
+  );
+  return $schema;
+}

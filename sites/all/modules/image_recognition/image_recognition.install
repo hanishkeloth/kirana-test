@@ -1,0 +1,98 @@
+<?php
+/**
+ * @file
+ * Install & uninstall functions for Push notifications module.
+ */
+
+/**
+ * Implementats of hook_schema().
+ */
+
+function image_recognition_schema() {
+  $schema['image_recognition_jobs'] = array(
+      'description' => 'Image Recognition Jobs',
+      'fields' => array(
+        'image_job_id' => array(
+          'description' => 'The primary identifier for a image Recognition job.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'job_type' => array(
+          'description' => 'Job Type',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+        ),
+        'job_id' => array(
+          'description' => 'Job Id',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+        ),
+      ),
+      'primary key' => array('image_job_id'),
+  );
+  $schema['subcategory_jobs'] = array(
+    'description' => 'Sub Category Jobs to execute',
+    'fields' => array(
+      'subcat_jobs_id' => array(
+        'description' => 'The primary identifier for a sub Category jobs',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'subcat_job_name' => array(
+        'description' => 'Sub Category Name',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+      ),
+      'subcat_job_type' => array(
+        'description' => 'Foriegn identifier for main job type',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+      ),
+      'subcat_job_gender' => array(
+        'description' => 'Gender of the sub Category',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('subcat_jobs_id'),
+  );
+  $schema['image_predictions'] = array(
+    'description' => 'Image Recognition Predictions details',
+    'fields' => array(
+        'predictions_id' => array(
+          'description' => 'The primary identifier for a image predictions.',
+          'type' => 'serial',
+          'unsigned' => TRUE,
+          'not null' => TRUE,
+        ),
+        'predictions_value' => array(
+          'description' => 'Predictions value',
+          'type' => 'varchar',
+          'length' => 32,
+          'not null' => TRUE,
+        ),
+        'predictions_percentage' => array(
+          'description' => 'Predictions percentage',
+          'type' => 'float',
+          'precision' => 4,
+          'scale' => 2,
+          'length' => 32,
+          'not null' => TRUE,
+        ),
+        'predictions_image' => array(
+          'description' => 'Image path',
+          'type' => 'text',
+          'not null' => TRUE,
+        ),
+    ),
+    'primary key' => array('predictions_id'),
+  );
+  return $schema;
+}

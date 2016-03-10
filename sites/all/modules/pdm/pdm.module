@@ -1,0 +1,634 @@
+<?php
+
+/**
+ * Implementation of hook_init()
+ *
+ * Load up our js and css
+ */
+function pdm_init() {
+  global $user;
+
+  drupal_add_js(array('uid' => $user->uid), 'setting');
+  drupal_add_js(drupal_get_path('module', 'pdm') . '/pdm.js');
+  drupal_add_css(drupal_get_path('module', 'pdm') . '/pdm.css');
+
+}
+
+/**
+ * Implementation of hook_menu()
+ */
+function pdm_menu() {
+  $items['pdm/dismiss'] = array(
+    'title' => 'Dismiss PDM Message',
+    'page callback' => 'pdm_dismiss_message',
+    'delivery callback' => 'ajax_deliver',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Generate the dismissable message.
+ *
+ * @param string $message
+ * @param array $options
+ *   Array of options for this pdm
+ */
+function pdm_create_message($message, $options) {
+
+  $options += pdm_load_default_options(); // Add defaults to passed in options
+
+  $options += $default_options; // Add defaults to passed in options
+
+  if (!is_null($options['uid'])) {
+    $user = user_load($options['uid']);
+  } else {
+    global $user;
+  }
+
+  // Determine if this user can really have a persistant message
+  // This deals with PDMs being set for anonymous users
+  if (!pdm_check_persistability()) {
+    $options['persist'] = FALSE;
+  }
+
+  // If the message is not meant to persist, then go right to the display of it and bail.
+  if ($options['persist'] == FALSE) {
+    drupal_set_message($message, $options['type'], $options['repeat']);
+    return TRUE;
+  }
+
+  // Generate the hash of this message
+  $hash = sha1($message);
+
+  // See if we have this message in the db.
+  // We want to know if we should supress it later on.
+  $ret = pdm_get_messages($user->uid, TRUE, $hash);
+
+  if (!empty($ret)) {
+    $msg = (array) $ret[0];
+
+    // Is this pdm auto expired?
+    $still_alive = pdm_auto_expire($msg, $user->uid);
+
+    // pdm was killed by auto expiration
+    if (!$still_alive) {
+      return FALSE;
+    }
+
+    // Update the counts if this is a display_count limited pdm
+    if ($msg['persist_count'] != 0) {
+      db_update('pdm')
+        ->fields(array('displays' => $msg['displays'] + 1))
+        ->condition('uid', $user->uid)
+        ->condition('hash', $hash)
+        ->execute();
+    }
+
+  }
+  // This is a shiney new pdm, load it into the db
+  else {
+    $pid = db_insert('pdm')
+      ->fields(array(
+        'uid' => $user->uid,
+        'message' => $message,
+        'hash' => $hash,
+        'type' => $options['type'],
+        'pdm_type' => $options['pdm_type'],
+        'persist_time' => $options['persist_time'],
+        'persist_count' => $options['persist_count'],
+        'dismissable' => $options['dismissable'],
+        'dismiss_time' => $options['dismiss_time'],
+        'dismiss_type' => $options['dismiss_type'],
+        'attributes' => json_encode($options['attributes']),
+        'paths' => $options['paths'],
+        'disable_ajax' => $options['disable_ajax'],
+        'created' => time(),
+        'updated' => time(),
+      ))
+      ->execute();
+  }
+
+}
+
+/**
+ * Alias of the pdm function.
+ *
+ * @param string $message
+ * @param array $options
+ *   Array of options for this pdm
+ */
+function pdm($message, $options) {
+  pdm_create_message($message, $options);
+}
+
+/**
+ * Ajax callback to dismiss a pdm
+ *
+ * @param int $pid
+ * @return NULL
+ */
+function pdm_dismiss_message($pid, $skip_token = FALSE) {
+
+  // No pid? Just bail now.
+  if (!$pid) {
+    return FALSE;
+  }
+
+  // Ensure our token is valid
+  if (!drupal_valid_token($_GET['token'], $pid) && !$skip_token) {
+    return FALSE;
+  }
+
+  // Dismiss the pdm by setting the dismissed time in the db.
+  db_update('pdm')
+    ->fields(array(
+      'dismissed' => time()
+    ))
+    ->condition('pid', $pid)
+    ->execute();
+  return TRUE;
+}
+
+/**
+ * Get messages. Either all for a uid, or a specific message by uid and hash
+ *
+ * @param int $uid
+ * @param boolean $create_check
+ *    If this set to TRUE then
+ * @param string $hash
+ *    Hash of the message. This is used when getting a message to see if it
+ *    should be supressed.
+ * @return array
+ *    Array containing 1 or more messages
+ */
+function pdm_get_messages($uid, $create_check = FALSE, $hash = NULL) {
+
+  $query = db_select('pdm', 'p')
+             ->fields('p')
+             ->condition('uid', $uid);
+
+  // The difference below is that !$create_check is called during hook_init()
+  // and is used to get messages that need to be shown (un-dismissed or
+  // un-expired).
+  // The else alternative is used by the pdm_create_messages function and gets
+  // messages that have been expired, but can be resurrected if conditions
+  // re-occur.
+  //
+  // hook_init() calls passes false
+  // The call in pdm_create_message passes TRUE
+  if (!$create_check) {
+    $query->where(' (dismissed = 0 OR (dismiss_time > 0 AND dismissed + dismiss_time < ' . time() . ')) ');
+  }
+  else {
+    $query->where(' dismissed = 0 OR (dismiss_time > 0 AND dismiss_type = 1)');
+  }
+
+  // If a hash has been passed in, add it to the query
+  if ($hash) {
+    $query->condition('hash', $hash);
+  }
+
+  // Load em up.
+  $msgs = $query->execute()->fetchAll();
+
+  // Unexpire any that were resurrected by dismiss_time
+  if (!$create_check) {
+    foreach ($msgs as $key => $msg) {
+      if ($msg->dismiss_time != 0 && $msg->dismissed != 0) {
+        $query = db_update('pdm')
+                   ->condition('uid', $uid)
+                   ->condition('hash', $msg->hash);
+        // Reset the persist count, if it is set
+        if ($msg->persist_count != 0) {
+          $fields['displays'] = '0';
+        }
+        $fields['updated'] = time();
+        $fields['dismissed'] = '0';
+        $query->fields($fields);
+        $query->execute();
+      }
+    }
+  }
+
+  // If it's an ajax request, just get messages that don't have disable_ajax.
+  if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] == 'XMLHttpRequest') {
+    foreach ($msgs as $id => $msg) {
+      // Unset the message if it's disable_ajax option is TRUE.
+      if (!empty($msg->disable_ajax)) {
+       unset($msgs[$id]);
+      }
+    }
+  }
+
+  return $msgs;
+
+}
+
+/**
+ * Pull a specific message by hash and uid
+ *
+ * @param int $uid
+ * @param string $hash
+ * @return array
+ */
+function pdm_get_message($uid, $hash) {
+  if (empty($uid) || empty($hash)) {
+    return FALSE;
+  }
+
+  $ret = db_select('pdm', 'p')
+           ->condition('uid', $uid)
+           ->condition('hash', $hash)
+           ->execute()
+           ->fetch(PDO::FETCH_ASSOC);
+
+  return $ret;
+
+}
+
+/**
+ * Determine if a pdm has auto-expired. Output TRUE if it is still valid and
+ * FALSE if it has expired.
+ *
+ * @param array $ret
+ * @param int $uid
+ * @return boolean
+ */
+function pdm_auto_expire($ret, $uid) {
+  // Do the persistence settings indicate that this pdm is expired?
+  $ret = (array) $ret;
+
+  if ($ret['dismissed'] == 0 &&
+      (($ret['persist_time'] != 0 && $ret['persist_time'] + $ret['updated'] < time())
+        ||
+      ($ret['persist_count'] != 0 && $ret['persist_count'] < $ret['displays'] + 1))
+     ) {
+
+    // Conditions have forced this pdm to be dismissed
+    if ($ret['dismiss_type'] == 1) {
+      // pdm can re-occur. We'll just delete it from the table to keep things clean
+
+      // Get this message data and archive it if set.
+      if (variable_get('pdm_archive_pdms', FALSE)) {
+        $msg = pdm_get_message($uid, $ret['hash']);
+        if (!empty($msg)) {
+          pdm_archive_pdm($msg['message'], $msg);
+        }
+      }
+
+      db_delete('pdm')
+        ->condition('uid', $uid)
+        ->condition('hash', $ret['hash'])
+        ->execute();
+    }
+    else {
+      // This pdm is toast. Gone forever. Mark it as dismissed and let it linger.
+      // TODO: Make an admin UI for cleaning up messages older than x days
+      db_update('pdm')
+        ->condition('uid', $uid)
+        ->condition('hash', $ret['hash'])
+        ->fields(array('dismissed' => time(), 'displays' => 0, 'updated' => time()))
+        ->execute();
+    }
+
+    // This PDM was expired
+    return FALSE;
+  }
+  else {
+    return TRUE;
+  }
+}
+
+/**
+ * Archive a dsm directly
+ *
+ * @param string $message
+ * @param array $options
+ */
+function pdm_archive_pdm($message, $options) {
+  global $user;
+
+  // Theoretically this should never be called for anonymous users, but in case
+  // it is, let's add some protection.
+  if (user_is_logged_in()) {
+
+    // Ensure defaults are all set so we don't get db issues
+    $options += pdm_load_default_options();
+
+    $pid = db_insert('pdm_archive')
+      ->fields(array(
+        'uid' => $user->uid,
+        'message' => $message,
+        'hash' => sha1($message),
+        'type' => $options['type'],
+        'pdm_type' => $options['pdm_type'],
+        'persist_time' => $options['persist_time'],
+        'persist_count' => $options['persist_count'],
+        'dismissable' => $options['dismissable'],
+        'dismiss_time' => $options['dismiss_time'],
+        'dismiss_type' => $options['dismiss_type'],
+        'paths' => $options['paths'],
+        'disable_ajax' => $options['disable_ajax'],
+        'created' => (!empty($options['created']) ? $options['created'] : time()),
+        'updated' => (!empty($options['updated']) ? $options['updated'] : time()),
+      ))
+      ->execute();
+  }
+}
+
+
+/**
+ * Load up the default options set
+ *
+ * @return array
+ */
+function pdm_load_default_options() {
+
+  $default_options = array(
+    'type'                => 'status', // Type of message
+    'pdm_type'            => 'misc', // This is a custom field that can be set for filtering. It is similar to the first param for watchdog in use.
+    'repeat'              => TRUE, // Whether or not the message will repeat if there are multiple identical messages generated
+    'persist'             => TRUE, // Whether or not the message perists across multiple page loads
+    'persist_count'       => 0, // Number of times the message should be displayed. NULL means untill dismissed
+    'persist_time'        => 0, // Time in seconds the message should persist for
+    'dismissable'         => TRUE, // Message can be dismissed
+    'dismiss_time'        => 0, // Timestamp until which the message should persist
+    'dismiss_type'        => 1, // 1 indicates that it can re-occur, 0 means it cannot
+    'paths'               => FALSE, // A list of paths on which this pdm should appear
+    'disable_ajax'        => 0, // Disable pdm messages from showing in ajax responses.
+    'uid'                 => NULL, // A user that this message should be shown to, defaults to the logged in user.
+  );
+
+  return $default_options;
+}
+
+/**
+ * Determine if we can actually allow a PDM to persist for this user.
+ * The ways a PDM can actually persist is if the user is logged in or
+ * if the session_api module is enabled.
+ *
+ * @global object $user
+ * @return boolean
+ */
+function pdm_check_persistability() {
+  $allow = FALSE;
+
+  if (user_is_logged_in()) {
+    $allow = TRUE;
+  }
+  else {
+    if (module_exists('session_api') && session_api_get_sid()) {
+      $allow = TRUE;
+    }
+  }
+
+  return $allow;
+}
+
+/**
+ * Implementation of hook_theme_registry_alter().
+ * Replace original messages theming function with our own.
+ */
+function pdm_theme_registry_alter(&$theme_registry) {
+  $theme_registry['status_messages']['function'] = 'theme_pdm';
+}
+
+/**
+ * Function to override default theming of drupal status messages
+ *
+ * @param type $vars
+ */
+function theme_pdm($variables) {
+  global $user;
+
+  // Check for request inside a form.
+  // Persistent message might be displayed more than once upon
+  // these kinds of requests.
+  if($_SERVER['REQUEST_METHOD'] == 'POST') {
+    return;
+  }
+
+  $display = $variables['display'];
+  $dsms = array();
+
+  // If dsms are dismissalbe, load them up first and create the pdms
+  if (pdm_check_persistability() && variable_get('pdm_dsm_persist', FALSE)) {
+    pdm_generate_dsm_messages($display, FALSE);
+  }
+  else {
+    // Load messages set with drupal_set_message()
+    $dsms = pdm_generate_dsm_messages($display);
+  }
+
+  // Load messages for this user and render those suckers.
+  $pdms = pdm_generate_pdm_messages($user->uid);
+
+  $msg_display = array_merge($dsms, $pdms);
+
+  ksort($msg_display);
+
+  // Ensure that this page is not cachable
+  if (count($msg_display) > 0) {
+    drupal_page_is_cacheable(FALSE);
+
+    // Group the messages
+    $msg_return = '';
+    foreach($msg_display as $type => $msg_group) {
+      foreach($msg_group as $msg) {
+        $msg_return .= $msg . "\n";
+      }
+    }
+    return $msg_return;
+  }
+
+  return '';
+
+}
+
+/**
+ * Load the messages for this user and pull the results from the theme function
+ *
+ * @param int $uid
+ * @return string
+ */
+function pdm_generate_pdm_messages($uid) {
+
+  $msg_display = array();
+
+  // Load the messages for this user
+  $msgs = pdm_get_messages($uid);
+  if (is_array($msgs)) {
+    foreach ($msgs as $msg) {
+      if (!pdm_auto_expire($msg, $uid) ) {
+        continue;
+      }
+      // If a path is set in the db, match that path, and only show this alert on it
+      if (!empty($msg->paths)) {
+        $path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
+        if (!drupal_match_path($path, $msg->paths)) {
+          continue;
+        }
+      }
+      $vars = array(
+        'message' => $msg->message,
+        'options' => (array) $msg,
+        'pid' => $msg->pid,
+      );
+
+      $msg_display[$msg->type][] = theme('pdm_messages', array('vars' => $vars));
+    }
+  }
+
+  return $msg_display;
+}
+
+/**
+ * Load messages set with drupal_set_message()
+ *
+ * @param boolean $theme_messages
+ * @return string
+ */
+function pdm_generate_dsm_messages($display, $theme_messages = TRUE) {
+  $msg_display = array();
+
+  foreach (drupal_get_messages($display) as $type => $messages) {
+    foreach($messages as $message) {
+      $vars = array(
+        'message' => $message,
+        'options' => array(
+          'type' => $type,
+          'repeat' => FALSE,
+          'dismissable' => variable_get('pdm_dsm_persist', FALSE),
+          'persist' => variable_get('pdm_dsm_persist', FALSE),
+        ),
+        'pid' => 0,
+      );
+
+      // If the pdm_dsm_persist is set to be TRUE, then we need to run pdm create
+      if (pdm_check_persistability() && variable_get('pdm_dsm_persist', FALSE)) {
+        pdm_create_message($vars['message'], $vars['options']);
+      }
+
+      // If the selection is set to store all dsms, slap them in the archive table
+      // If we're making all dsms persist they will get added to the active pdm db and archived later so they don't need to go in.
+      if (pdm_check_persistability() && variable_get('pdm_archive_dsms', FALSE) && !variable_get('pdm_dsm_persist', FALSE)) {
+        pdm_archive_pdm($vars['message'], $vars['options']);
+      }
+
+      // Add to the list o messages to show.
+      if ($theme_messages) {
+        $msg_display[$type][] = theme('pdm_messages', array('vars' => $vars));
+      }
+
+    }
+  }
+
+  return $msg_display;
+
+}
+
+/**
+ * Theme function for PDM and DSM messages
+ *
+ * This function handles the theming and output of the messages.
+ *
+ * @param array $vars
+ * @return string
+ */
+function theme_pdm_messages($vars) {
+
+  // Assign our values out of the vars array
+  $options = (array)  $vars['vars']['options'];
+  $message = (string) $vars['vars']['message'];
+  $pid =     (int)    $vars['vars']['pid'];
+
+  // Set our default options and merge them into the passed in options
+  $defaults = array('type' => 'status', 'repeat' => TRUE, 'dismissable' => 0);
+  if (is_array($options)) {
+    $options += $defaults;
+  }
+
+  // Add our dismiss link
+  if ($options['dismissable']) {
+    $url = is_int($pid) && $pid > 0 ? 'pdm/dismiss/' . $pid : '';
+    $text = empty($url) ? 'Hide' : 'Dismiss';
+    $token = drupal_get_token($pid);
+
+    $message .= '<div id="pdm-id-' . $pid . '" class="pdm-dismiss-wrapper">' .
+                l(t($text), $url, array('query' => array('token' => $token), 'fragment' => 'refresh', 'external' => FALSE, 'attributes' => array('class' => 'pdm-dismiss-link'))) .
+                '</div>';
+  }
+
+  if (!empty($options['attributes'])) {
+    $options['attributes'] = (array) json_decode($options['attributes']);
+  }
+  else {
+    $options['attributes'] = array();
+  }
+
+  $attributes = pdm_set_attributes($options);
+
+  if ($options['type'] == 'overlay' && module_exists('pdm_overlay') && !defined('MODAL_ALERTED')) {
+    pdm_overlay_modal_render($message);
+  }
+  else {
+    // Return HTML
+    return '<div ' . $attributes . '><div class="pdm-message-wrapper pdm-' . $options['type'] . '">' . $message . '</div></div>';
+  }
+}
+
+/**
+ * Implementation of hook_theme().
+ *
+ * This registers our themeing function(s)
+ */
+function pdm_theme() {
+  return array(
+    'pdm_messages' => array(
+      'variables' => array(
+        'vars' => NULL,
+      ),
+    ),
+  );
+}
+
+/**
+ * Render a message and output it right here. Really only useful for
+ * non-persistent messages.
+ *
+ * @param string $message
+ * @param array $options
+ * @param int $pid
+ */
+function pdm_render_message($message, $options, $pid = 0) {
+  return theme('pdm_messages', array('vars' => array('message' => $message, 'options' => $options, 'pid' => $pid)));
+}
+
+function pdm_set_attributes($options) {
+
+  if (!isset($options['attributes']['class']) || !is_array($options['attributes']['class'])) {
+    $options['attributes']['class'] = array();
+  }
+
+  // Set any attributes, such as cluetips
+  $options['attributes']['class'] = array_merge($options['attributes']['class'], array('messages', $options['type']));
+  // Group any attributes by key
+  foreach ($options['attributes'] as $key => $attr) {
+    if (is_array($attr)) {
+      $attr = implode(' ', $attr);
+    }
+    $attr_sets[$key][] = $attr;
+  }
+
+  $attr_types = array_keys($attr_sets);
+  $attributes = '';
+  if (!empty($attr_sets)) {
+    foreach ($attr_types as $type) {
+      $attributes .= ' ' . $type . '="' . implode(' ', $attr_sets[$type]) . '"';
+    }
+  }
+  return $attributes;
+}

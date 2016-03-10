@@ -1,0 +1,388 @@
+<?php
+function ars_node_insert($node){
+  //module_load_include('module', 'content_notification', 'content_notification');
+  if($node->type == 'pin'){
+    global $user;
+      $language = field_language('node', $node, 'body');
+      $description = $node->body[$language][0]['value'];
+      $languagec = field_language('node', $node, 'field_category1');
+     $category_id = $node->field_category1[$languagec][0]['tid'];
+     $languagei = field_language('node', $node, 'field_image');
+      $image = file_create_url($node->field_image[$languagei][0]['uri']);
+      $hashtags = array();
+
+
+    foreach ($node->field_hashtags['und'] as $link) {
+     //drupal_set_message(print_r($link,1));
+     $hashtags[]= str_replace('#', ',',$link['name']);
+     //$i++;
+      }
+      $wish_status = $node->status;
+if ($wish_status = '1'){
+$status ='READY';
+}else{
+$status ='DISABLED';
+}
+
+$comma_separated = implode("", $hashtags);
+$languageurl = field_language('node', $node, 'field_image');
+$fid = $node->field_image[$languageurl][0]['fid'];
+$file = file_load($fid);
+$uri = $file->uri;
+$url = file_create_url($uri);
+$data = 'userid=test%40kdml.co.kr&apikey=da33ce5a51cef8cfe375823f08daf440&status='.$status.'&unique_id=REQ'.$node->nid.'&keyword='.$comma_separated.'&img_url='.$url.'&title=&description='.$description.'&category='.$category_id.'';
+
+//$data = 'userid=test%40kdml.co.kr&apikey=da33ce5a51cef8cfe375823f08daf440&unique_id=REQ'.$nid.'&keyword='.$comma_separated.'&img_url='.$url.'&title=&description='.$description.'&category='.$category_id.'';
+
+$options = array(
+                'method' => 'POST',
+                'data' => $data,
+                'timeout' => 15,
+                'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
+        );
+
+
+$result = drupal_http_request('http://207.182.158.186/api/request/?', $options);
+// Extract the field collection item ids
+
+//$i = 0;
+
+	 //drupal_set_message('');
+  $item_status = 0;
+  $frequency_no = 0;
+  if($result->code == '200'){
+    $suggestions = json_decode($result->data,true);
+    if(!empty($suggestions['items'])){
+       $item_status = 1;
+       $frequency_no = 1;
+    }
+  }
+  if($node->uid!='5497'){
+    /* Insert data to ARS Tracking */
+    $ars_tracking_det = array(
+      'entity_id' => $node->nid,
+      'frequency_no' => $frequency_no,
+      'next_schedule' => strtotime(date("Y-m-d H:i:s")) + (1*60),
+      'item_status' => $item_status,
+    );
+
+    $ars_track = db_insert('ars_tracking')
+    ->fields($ars_tracking_det)
+    ->execute();
+  	}
+  }else if($node->type == 'irs'){
+    module_load_include('module', 'image_recognition', 'image_recognition');
+    $language = field_language('node', $node, 'body');
+    $description = $node->body[$language][0]['value'];
+    $languagec = field_language('node', $node, 'field_category_irs');
+    $category_id = $node->field_category_irs[$languagec][0]['tid'];
+    /*$languagei = field_language('node', $node, 'field_image_irs');
+    $image = file_create_url($node->field_image_irs[$languagei][0]['uri']);*/
+
+    $languageurl = field_language('node', $node, 'field_image_irs');
+    $fid = $node->field_image_irs[$languageurl][0]['fid'];
+    $file = file_load($fid);
+    $uri = $file->uri;
+    $url = file_create_url($uri);
+    $hashtags = array();
+    $predictions = _image_recognition_predictions($url,$category_id);
+    $description = $predictions;
+    echo "<pre>";print_r($predictions);
+
+    $hashtags[]= str_replace(' ', ',',$predictions);
+    $comma_separated = implode("", $hashtags);
+    echo "<pre>";print_r($hashtags);
+    echo "<pre>";print_r($comma_separated);
+    $data = 'userid=test%40kdml.co.kr&apikey=da33ce5a51cef8cfe375823f08daf440&status='.$status.'&unique_id=REQ'.$node->nid.'&keyword='.$comma_separated.'&img_url='.$url.'&title=&description='.$description.'&category='.$category_id.'';
+
+
+    $options = array(
+      'method' => 'POST',
+      'data' => $data,
+      'timeout' => 15,
+      'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
+    );
+
+
+    $result = drupal_http_request('http://207.182.158.186/api/request/?', $options);
+    // exit;
+  }
+}
+function ars_node_update($node){
+  //module_load_include('module', 'content_notification', 'content_notification');
+ if($node->type == 'pin'){
+    global $user;
+      $language = field_language('node', $node, 'body');
+      $description = $node->body[$language][0]['value'];
+      $languagec = field_language('node', $node, 'field_category1');
+     $category_id = $node->field_category1[$languagec][0]['tid'];
+     $languagei = field_language('node', $node, 'field_image');
+      $image = file_create_url($node->field_image[$languagei][0]['uri']);
+      $hashtags = array();
+
+
+    foreach ($node->field_hashtags['und'] as $link) {
+     //drupal_set_message(print_r($link,1));
+     $hashtags[]= str_replace('#', ',',$link['name']);
+     //$i++;
+      }
+
+$comma_separated = implode("", $hashtags);
+$languageurl = field_language('node', $node, 'field_image');
+$fid = $node->field_image[$languageurl][0]['fid'];
+$file = file_load($fid);
+$uri = $file->uri;
+$url = file_create_url($uri);
+$data = 'userid=test%40kdml.co.kr&apikey=da33ce5a51cef8cfe375823f08daf440&unique_id=REQ'.$node->nid.'&keyword='.$comma_separated.'&img_url='.$url.'&title=&description='.$description.'&category='.$category_id.'';
+$options = array(
+                'method' => 'POST',
+                'data' => $data,
+                'timeout' => 15,
+                'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
+        );
+
+
+$result = drupal_http_request('http://207.182.158.186/api/request/?', $options);
+// Extract the field collection item ids
+
+//$i = 0;
+
+	 drupal_set_message('');
+	}
+}
+
+function ars_menu(){
+  $items['ars_tracking'] = array(
+    'title' => 'ARS tracking',
+    'page callback' => 'ars_retrieve_recommendations',
+    'access callback' => TRUE,
+  );
+
+  $items['ars_tracking/sample'] = array(
+    'title' => 'ARS tracking',
+    'page callback' => 'ars_retrieve_recommendations_sample',
+    'access callback' => TRUE,
+  );
+  return $items;
+}
+
+/**
+ * Function to retrieve the Auto recommendations frequently
+ */
+
+function ars_retrieve_recommendations(){
+  module_load_include('module', 'system_notifications', 'system_notifications');
+  module_load_include('module', 'wishary_pin', 'wishary_pin');
+  global $user;
+  $created_time = strtotime(date("Y-m-d H:i:s"));
+  //echo $created_time."<br>";exit;
+
+    $query = db_select('ars_tracking','ars')
+    ->fields('ars',array('entity_id','frequency_no','item_status','tracking_id','next_schedule'))
+    ->condition('ars.next_schedule',$created_time,'<=')
+    ->condition('ars.item_status','0','=');
+    $result = $query->execute()->fetchAllAssoc('tracking_id');
+   foreach ($result as $record) {
+      $nid = $record->entity_id;
+      $node = node_load($nid);
+      if(!empty($node)){
+        $api_url = "http://207.182.158.186/api/suggestion/?userid=test%40kdml.co.kr&apikey=da33ce5a51cef8cfe375823f08daf440&unique_id=REQ".$record->entity_id;
+
+        $options = array(
+            'method' => 'GET',
+            'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
+        );
+        $result = drupal_http_request($api_url, $options);
+        if($result->code == '200'){
+          $suggestions = json_decode($result->data,true);
+          //If items are returned Store the data in the DB and send notification to user
+          if(!empty($suggestions['items'])){
+            $system_suggestions = rearrangeAffiliates($suggestions['items']);
+            $frequency_no = $record->frequency_no+1;
+              for($i=0;$i<2;$i++){
+                $item = $system_suggestions[$i];
+                // Begin building file object.
+                $filepath = $item['img_url'];
+                $image = file_get_contents($filepath); // this is a PHP fuction to get a string representation of the image file
+                $file_name = trim(basename($filepath), '.');
+                $destination = 'public://';
+                $file = file_save_data($image, $destination.$file_name, FILE_EXISTS_REPLACE);
+
+                $comment = new stdClass();
+                $comment->cid = NULL;
+                $comment->nid = $node->nid;
+                $comment->pid = 0;
+                $comment->uid = $user->uid;
+                $comment->subject = substr($item['name'],0,60);
+                $comment->hostname = $user->hostname;
+                $comment->created = strtotime($item['cdate']);
+                $comment->changed = strtotime($item['cdate']);
+                $comment->status = 1;
+                $comment->thread = $i.'/';
+                $comment->language = LANGUAGE_NONE;
+                $comment->field_suggestion_title[LANGUAGE_NONE][0]['value'] = $item['name'];
+                $comment->field_suggestion_price[LANGUAGE_NONE][0]['value'] = $item['price'];
+                $comment->field_suggestion_source[LANGUAGE_NONE][0]['url'] = $item['product_url'];
+                $comment->field_suggestion_image[LANGUAGE_NONE][0]['fid'] = $file->fid;
+                $comment->field_comment_type[LANGUAGE_NONE][0]['value'] = 'system';
+                $comment->field_original_cid[LANGUAGE_NONE][0]['value'] = 0;
+                drupal_static_reset('_get_all_related_nodes');
+                comment_save($comment);
+              }
+            _update_ars_tracking($record->tracking_id,$frequency_no,1,$record->next_schedule);
+          } else {
+            $frequency_no = $record->frequency_no+1;
+            if($record->frequency_no <=5){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (1*60);
+            } else if($record->frequency_no > 5 && $record->frequency_no <=10){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (10*60);
+            } else if($record->frequency_no > 10 && $record->frequency_no <=20){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (15*60);
+            } else if($record->frequency_no > 20 && $record->frequency_no <=30){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (30*60);
+            } else if($record->frequency_no > 30){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (45*60);
+            }
+           _update_ars_tracking($record->tracking_id,$frequency_no,0,$next_schedule);
+          }
+        } else {
+          $frequency_no = $record->frequency_no+1;
+          if($record->frequency_no <=5){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (1*60);
+          } else if($record->frequency_no > 5 && $record->frequency_no <=10){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (10*60);
+          } else if($record->frequency_no > 10 && $record->frequency_no <=20){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (15*60);
+          } else if($record->frequency_no > 20 && $record->frequency_no <=30){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (30*60);
+          } else if($record->frequency_no > 30){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (45*60);
+          }
+          _update_ars_tracking($record->tracking_id,$frequency_no,0,$next_schedule);
+        }
+      } else{
+        $frequency_no = $record->frequency_no+1;
+        _update_ars_tracking($record->tracking_id,$frequency_no,1,$record->next_schedule);
+      }
+    }
+}
+
+/**
+ * Function to update the ARS Tracking details
+ */
+
+function _update_ars_tracking($tracking_id,$frequency_no,$item_status,$next_schedule){
+  $query = db_update('ars_tracking')
+    ->fields(array('frequency_no'=>$frequency_no,'next_schedule' =>$next_schedule,'item_status'=>$item_status))
+    ->condition('tracking_id', $tracking_id, '=')
+    ->execute();
+}
+
+function ars_cron(){
+  ars_retrieve_recommendations();
+}
+
+function ars_retrieve_recommendations_sample(){
+  module_load_include('module', 'system_notifications', 'system_notifications');
+  module_load_include('module', 'wishary_pin', 'wishary_pin');
+  global $user;
+  $created_time = strtotime(date("Y-m-d H:i:s"));
+  //echo $created_time."<br>";exit;
+
+    $query = db_select('ars_tracking','ars')
+    ->fields('ars',array('entity_id','frequency_no','item_status','tracking_id','next_schedule'))
+    ->condition('ars.next_schedule',$created_time,'<=')
+    ->condition('ars.item_status','0','=')
+    ->condition('ars.frequency_no','0','=');
+    $result = $query->execute();
+   foreach ($result as $record) {
+      $nid = $record->entity_id;
+      echo "nid=".$nid."<br>";
+      $node = node_load($record->entity_id);
+      if(!empty($node)){
+        $api_url = "http://207.182.158.186/api/suggestion/?userid=test%40kdml.co.kr&apikey=da33ce5a51cef8cfe375823f08daf440&unique_id=REQ".$record->entity_id;
+        $options = array(
+            'method' => 'GET',
+            'headers' => array('Content-Type' => 'application/x-www-form-urlencoded'),
+        );
+        $resultComment = drupal_http_request($api_url, $options);
+        if($resultComment->code == '200'){
+          $suggestions = json_decode($resultComment->data,true);
+          //If items are returned Store the data in the DB and send notification to user
+          if(!empty($suggestions['items'])){
+            $system_suggestions = rearrangeAffiliates($suggestions['items']);
+            //echo "<pre>";print_r($system_suggestions);
+            $frequency_no = $record->frequency_no+1;
+            //foreach ($system_suggestions as $item) {
+              for($i=0;$i<2;$i++){
+                $item = $system_suggestions[$i];
+                //echo "<pre>";print_r($item);
+                // Begin building file object.
+                $filepath = $item['img_url'];
+                $image = file_get_contents($filepath); // this is a PHP fuction to get a string representation of the image file
+                $file_name = trim(basename($filepath), '.');
+                $destination = 'public://';
+                $file = file_save_data($image, $destination.$file_name, FILE_EXISTS_REPLACE);
+
+                $comment = new stdClass();
+                $comment->cid = NULL;
+                $comment->nid = $node->nid;
+                $comment->pid = 0;
+                $comment->uid = $user->uid;
+                $comment->subject = substr($item['name'],0,60);
+                $comment->hostname = $user->hostname;
+                $comment->created = strtotime($item['cdate']);
+                $comment->changed = strtotime($item['cdate']);
+                $comment->status = 1;
+                $comment->thread = $i.'/';
+                $comment->language = LANGUAGE_NONE;
+                $comment->field_suggestion_title[LANGUAGE_NONE][0]['value'] = $item['name'];
+                $comment->field_suggestion_price[LANGUAGE_NONE][0]['value'] = $item['price'];
+                $comment->field_suggestion_source[LANGUAGE_NONE][0]['url'] = $item['product_url'];
+                $comment->field_suggestion_image[LANGUAGE_NONE][0]['fid'] = $file->fid;
+                $comment->field_comment_type[LANGUAGE_NONE][0]['value'] = 'system';
+                $comment->field_original_cid[LANGUAGE_NONE][0]['value'] = 0;
+                //echo "<pre>SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS";print_r($comment);
+                //comment_submit($comment);
+                drupal_static_reset('_get_all_related_nodes');
+                comment_save($comment);
+              }
+              //$i++;
+            //}
+            _update_ars_tracking($record->tracking_id,$frequency_no,1,$record->next_schedule);
+          } else {
+            $frequency_no = $record->frequency_no+1;
+            if($record->frequency_no <=5){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (1*60);
+            } else if($record->frequency_no > 5 && $record->frequency_no <=10){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (10*60);
+            } else if($record->frequency_no > 10 && $record->frequency_no <=20){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (15*60);
+            } else if($record->frequency_no > 20 && $record->frequency_no <=30){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (30*60);
+            } else if($record->frequency_no > 30){
+              $next_schedule = strtotime(date("Y-m-d H:i:s")) + (45*60);
+            }
+            _update_ars_tracking($record->tracking_id,$frequency_no,0,$next_schedule);
+          }
+        } else {
+          $frequency_no = $record->frequency_no+1;
+          if($record->frequency_no <=5){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (1*60);
+          } else if($record->frequency_no > 5 && $record->frequency_no <=10){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (10*60);
+          } else if($record->frequency_no > 10 && $record->frequency_no <=20){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (15*60);
+          } else if($record->frequency_no > 20 && $record->frequency_no <=30){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (30*60);
+          } else if($record->frequency_no > 30){
+            $next_schedule = strtotime(date("Y-m-d H:i:s")) + (45*60);
+          }
+          _update_ars_tracking($record->tracking_id,$frequency_no,0,$next_schedule);
+        }
+      } else{
+        $frequency_no = $record->frequency_no+1;
+        _update_ars_tracking($record->tracking_id,$frequency_no,1,$record->next_schedule);
+      }
+    }
+}

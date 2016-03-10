@@ -1,0 +1,95 @@
+<?php
+include_once(drupal_get_path('module', 'tb_wall_layout') . '/tb_wall_layout.inc');
+
+function tb_wall_layout_install() {
+  $content_types = node_type_get_types();
+  $vocabularies = tb_wall_layout_vocabularies();
+  foreach($vocabularies as $machine_name => $info) {
+    $vocabulary = taxonomy_vocabulary_load(variable_get($machine_name, 0));
+    if (!$vocabulary) {
+      $edit = array(
+        'name' => $info['title'],
+        'machine_name' => $machine_name,
+        'description' => $info['description'],
+        'hierarchy' => 1,
+        'module' => 'tb_wall_layout',
+        'weight' => 50,
+      );
+      $vocabulary = (object) $edit;
+      taxonomy_vocabulary_save($vocabulary);
+      variable_set($machine_name, $vocabulary->vid);
+      
+      foreach($info['terms'] as $term => $description) {
+      	$term_info = array(
+          'name' => $term,
+          'description' => $description,
+          'vid' => $vocabulary->vid,
+        ); 
+        $term_object = (object) $term_info;
+        taxonomy_term_save($term_object);
+      }
+      if (!field_info_field($info['field']['name'])) {
+        $field = array(
+          'field_name' => $info['field']['name'],
+          'type' => 'taxonomy_term_reference',
+          'cardinality' => 1,
+          'settings' => array(
+            'cardinality' => -1,
+            'allowed_values' => array(
+              array(
+                'vocabulary' => $vocabulary->machine_name,
+                'parent' => 0,
+              ),
+            ),
+          ),
+        );
+        field_create_field($field);
+      }      
+    }
+    foreach($content_types as $bundle => $content_type) {
+      $bundles = $info['bundles'];
+      if ((isset($bundles['in']) && !in_array($bundle, $bundles['in'])) ||
+          (isset($bundles['except']) && in_array($bundle, $bundles['except']))) {
+        continue;
+      }
+      if(!field_info_instance('node', $info['field']['name'], $bundle)) {
+        $instance = array(
+          'field_name' => $info['field']['name'],
+          'entity_type' => 'node',
+          'label' => $vocabulary->name,
+          'bundle' => $bundle,
+          'required' => FALSE,
+          'widget' => array(
+            'type' => 'options_select',
+            'weight' => $info['field']['weight'],
+          ),
+          'display' => array(
+            'default' => array(
+              'type' => 'hidden',
+              'weight' => 10,
+            ),
+            'teaser' => array(
+              'type' => 'hidden',
+              'weight' => 10,
+            ),
+          ),
+        );
+        field_create_instance($instance);
+      }
+    }      
+  }
+}
+
+function tb_wall_layout_uninstall() {
+  $vocabularies = tb_wall_layout_vocabularies();
+  foreach($vocabularies as $machine_name => $info) {
+    $vocabulary = taxonomy_vocabulary_load(variable_get($machine_name, 0));
+  	if($vocabulary) {
+  	  taxonomy_vocabulary_delete($vocabulary->vid);
+      variable_del($machine_name);
+    }
+    if (field_info_field($info['field']['name'])) {
+      field_delete_field($info['field']['name']);
+    }
+  }
+}

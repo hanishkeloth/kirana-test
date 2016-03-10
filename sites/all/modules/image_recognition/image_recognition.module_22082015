@@ -1,0 +1,776 @@
+<?php
+
+/**
+* Implements hook_menu.
+*/
+
+function image_recognition_menu() {
+  $items = array();
+  $items['image_recognition/get_color/%'] = array(
+    'title' => 'Get the response from image match',
+    'description' => 'Get the response from image match',
+    'page callback' => '_image_recognition_get_color',
+    'access callback' => TRUE,
+    'page arguments' => array(2),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/image_recognition'] = array(
+    'title' => t('Image Recognition Settings'),
+    'description' => 'Image Recognition Settings',
+    'position' => 'left',
+    'weight' => -100,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer site configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+  $items['admin/config/image_recognition/jobs'] = array(
+    'title' => 'Image Recognition Jobs',
+    'description' => 'Image Recognition Jobs',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('image_recognition_jobs'),
+    'access arguments' => array('administer site configuration'),
+  );
+  $items['admin/config/image_recognition/jobs/edit/%'] = array(
+    'title' => 'Image Recognition Jobs',
+    'description' => 'Image Recognition Jobs',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('image_recognition_jobs',5),
+    'access arguments' => array('administer site configuration'),
+  );
+  $items['admin/config/image_recognition/jobs/delete/%'] = array(
+   'title' => 'Delete',
+   'page callback' => 'drupal_get_form',
+   'page arguments' => array('image_recognition_jobs_delete', 5),
+   'access arguments' => array('administer site configuration'),
+   'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/config/image_recognition/subcat_jobs'] = array(
+   'title' => 'Image Recognition Subcategory Jobs',
+   'page callback' => 'drupal_get_form',
+   'page arguments' => array('image_recognition_subcat_jobs'),
+   'access arguments' => array('administer site configuration'),
+  );
+  $items['admin/config/image_recognition/subcat_jobs/delete/%'] = array(
+   'title' => 'Delete',
+   'page callback' => 'drupal_get_form',
+   'page arguments' => array('image_recognition_subcat_jobs_delete', 5),
+   'access arguments' => array('administer site configuration'),
+   'type' => MENU_CALLBACK,
+  );
+
+  $items['get_sub_categories/%'] = array(
+    'title' => 'Get sub categories',
+    'description' => "Get all sub Categories",
+    'page callback' => '_get_all_sub_categories',
+    'access callback' => TRUE,
+    'page arguments' => array(1),
+    'weight' => 10,
+  );
+  return $items;
+}
+
+function image_recognition_jobs() {
+  $form = array();
+  $job_type = '';
+  $job_id = '';
+  if(arg(4) == 'edit' && is_numeric(arg(5))){
+    $image_rec_jobs = _get_image_recognition_jobs(arg(5));
+    $form['image_job_id'] = array(
+    '#type' => 'textfield',
+    '#default_value' => arg(5),
+    );
+    $job_type = $image_rec_jobs->job_type;
+    $job_id = $image_rec_jobs->job_id;
+  }
+  $form['job_type'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Job type'),
+    '#default_value' => $job_type,
+    '#required' => TRUE,
+  );
+  $form['job_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Job Id'),
+    '#default_value' => $job_id,
+    '#required' => TRUE,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+  $form['add_subcategory'] = array(
+    '#markup' => l(t('Add Subcategory Jobs'),'admin/config/image_recognition/subcat_jobs'),
+  );
+  $form['output'] = _image_recognition_jobs_save($form, $form_state);
+  return $form;
+}
+
+function image_recognition_subcat_jobs() {
+  $form = array();
+  $categories = _get_all_categories();
+  $category_options = array();
+  $i=0;
+  //echo "<pre>";print_r($categories);exit;
+  foreach ($categories as $cat => $category) {
+    /*if($category['parents'][0]!=0 && !empty($category['name'])){
+      $cat_name = explode(' ',trim($category['name']));
+      if(!empty($cat_name[1])){
+        $category_options[$category['name']] = trim($cat_name[1]);
+      }else{
+        $category_options[$category['name']] = trim($category['name']);
+      }
+      $i++;
+    }*/
+    if($category['parents'][0]!=0 && !empty($category['name'])){
+      $category_options[$category['tid']] = trim($category['name']);
+      $i++;
+    }
+  }
+  //echo "<pre>";print_r($category_options);exit;
+  $form['sub_catid'] = array(
+    '#title' => 'Select the Subcategories',
+    '#type' => 'select',
+    '#description' => 'Select the Subcategories for the jobs',
+    '#options' => $category_options,
+    '#required' => TRUE,
+  );
+  $main_jobs = _get_all_main_jobs();
+  foreach ($main_jobs as $main_job) {
+    $subcat_jobs[$main_job->image_job_id] = $main_job->job_type;
+  }
+   $form['sub_cat_job'] = array(
+    '#title' => 'Select the Jobs to be executed',
+    '#type' => 'checkboxes',
+    '#description' => 'Select the jobs for Subcategories',
+    '#options' => $subcat_jobs,
+    '#required' => TRUE,
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+
+  $form['output'] = _image_recognition_subcat_jobs_save($form, $form_state);
+
+  return $form;
+}
+
+function _get_all_main_jobs() {
+  $query = db_select('image_recognition_jobs','irj')
+    ->fields('irj',array('job_type','image_job_id'))
+    ->condition('irj.job_type','Category','!=');
+  $result = $query->execute()->fetchAll();
+  return $result;
+}
+
+function _get_all_categories(){
+  $vid = taxonomy_vocabulary_machine_name_load("categories")->vid;
+  $categories = taxonomy_get_tree($vid);
+  //remove duplicate retailer_id array
+  $outputArray = array(); // The results will be loaded into this array.
+  $keysArray = array(); // The list of keys will be added here.
+
+  //Get the count for duplicate array
+  foreach ($categories as $key => $innerArray){
+    foreach ($innerArray as $key2 => $value2){
+        if (array_key_exists($key2, $array_count) && array_key_exists($value2, $array_count[$key2])){
+            $array_count[$key2][$value2]++;
+        } else {
+            $array_count[$key2][$value2] = 1;
+        }
+    }
+    /*if (!in_array($innerArray->name, $keysArray)) { // Check to see if retailer_id already been used before.
+      $keysArray[] = $innerArray->name; // If retailer_id hasn't been used before, add it into the list of keys.
+      $outputArray[$innerArray->name] = $innerArray; // Add the inner array into the output.
+    }*/
+    //$outputArray[$innerArray->name] = $innerArray; // Add the inner array into the output.
+  }
+
+  $final_array = array();
+  foreach ($categories as $output => $value) {
+    //if($array_count['name'][$value->name]<2 && $value->parents[0]!=0){
+    if($array_count['name'][$value->name]>=2 && $value->parents[0]!=0){
+      $term = taxonomy_term_load($value->parents[0]);
+      $arr = explode('-',trim($term->name));
+      $value->name = trim($arr[0]).' '.$value->name;
+    }
+    $final_array[$value->name]['tid'] = $value->tid;
+    $final_array[$value->name]['name'] = $value->name;
+    $final_array[$value->name]['parents'] = $value->parents;
+    $final_array[$value->name]['count'] = $array_count['name'][$value->name];
+  }
+  return $final_array;
+}
+
+/**
+ * Get all the child taxomony terms for the categories
+ * @param $tid
+ * $tid is from taxonomy_get_tree.
+ * $tid is the parent id
+ */
+function _get_all_child_categories($tid){
+  $child_categories = taxonomy_get_children($tid);
+  return $child_categories;
+}
+
+function _get_image_recognition_jobs($image_job_id=NULL, $job_type=NULL) {
+  if(isset($image_job_id)){
+    $query = db_select('image_recognition_jobs', 'irj')
+      ->fields('irj',array('job_type','job_id'))
+      ->condition('irj.image_job_id',$image_job_id);
+      $result = $query->execute()->fetchAll();
+  }
+  if(isset($job_type)){
+    $query = db_select('image_recognition_jobs', 'irj')
+      ->fields('irj',array('job_id'))
+      ->condition('irj.job_type',$job_type);
+      $result = $query->execute()->fetchField();
+  }
+  if(!empty($result)){
+    return $result[0];
+  }else{
+    return NULL;
+  }
+}
+
+function image_recognition_jobs_submit($form, &$form_state){
+  $job_type = $form_state['values']['job_type'];
+  $job_id = $form_state['values']['job_id'];
+  if(isset($form_state['values']['image_job_id'])){
+    $image_job_id = $form_state['values']['image_job_id'];
+    $result = db_update('image_recognition_jobs')
+      ->fields(array(
+        'job_type' => $job_type,
+        'job_id' => $job_id,
+      ))
+      ->condition('image_job_id', $image_job_id, '=')
+      ->execute();
+  } else {
+    $job_det = _get_image_recognition_jobs(NULL,$job_type);
+    if(empty($job_det)){
+      db_insert('image_recognition_jobs')
+      ->fields(array('job_type' => $job_type,'job_id'=>$job_id))
+      ->execute();
+    } else {
+      form_set_error('job_type','This job already exist');
+    }
+  }
+  $form_state['rebuild'] = TRUE;
+}
+
+function _image_recognition_jobs_save($form, $form_state) {
+  $jobs_list = db_select('image_recognition_jobs', 'irj')
+    ->fields('irj',array('image_job_id','job_type','job_id'))
+    ->execute();
+  foreach ($jobs_list as $jobs) {
+    $rows[] = array(
+      'data' => array(
+        $jobs->job_type,
+        $jobs->job_id,
+        l('Edit','admin/config/image_recognition/jobs/edit/'.$jobs->image_job_id),
+        l('Delete','admin/config/image_recognition/jobs/delete/'.$jobs->image_job_id),
+      )
+    );
+  }
+
+  $header = array(
+    array('data' => 'Job Type'),
+    array('data' => 'Job Id'),
+    array('data' => 'Edit'),
+    array('data' => 'Delete'),
+  );
+
+  $html = theme('table',
+        array(
+          'header' => $header,
+          'rows'=>$rows,
+          'caption' => 'Image Recognition Jobs', //Optional Caption for the table
+          'sticky' => TRUE,           //Optional to indicate whether the table headers should be sticky
+          'empty' => 'No jobs added...',   //Optional empty text for the table if resultset is empty
+        )
+      );
+  return array(
+    '#markup' => '<div id="image_recognition_job_output">'.$html.'</div>',
+  );
+}
+
+function image_recognition_jobs_delete($form, &$form_state, $image_job_id) {
+  $form = array();
+  $form['image_job_id'] = array(
+    '#type' => 'value',
+    '#value' => $image_job_id,
+  );
+  return confirm_form($form,
+    t('Are you sure you want to delete this Job Type?'),
+    'admin/config/image_recognition/jobs',
+    t('This action cannot be undone.'),
+    t('Delete'),
+    t('Cancel')
+  );
+  return $form;
+}
+
+/**
+ * submit handler for the image_recognition_jobs_delete
+ * this function is invoked only when the user clicks confirm button
+ * clickin on cancel, the user goes back to the $path
+ */
+function image_recognition_jobs_delete_submit($form, &$form_state) {
+  if (isset($form_state['values']['image_job_id'])) {
+    $image_job_id = $form_state['values']['image_job_id'];
+    $delete_result = db_delete('image_recognition_jobs')
+            ->condition('image_job_id',$image_job_id)
+            ->execute();
+  }
+  drupal_set_message('Image Recognition Job deleted successfully');
+  $form_state['redirect'] = 'admin/config/image_recognition/jobs';
+}
+
+
+function image_recognition_subcat_jobs_submit($form, &$form_state){
+  $sub_cat_name = $form_state['values']['sub_catid'];
+  $query = db_select('subcategory_jobs', 'scj')
+      ->fields('scj',array('subcat_jobs_id'))
+      ->condition('scj.subcat_job_name',$sub_cat_name);
+      $result = $query->execute()->fetchField();
+  if(!empty($result)){
+    form_set_error('sub_catid','Jobs already added for this category');
+  }else{
+    $term  = taxonomy_term_load($sub_cat_name);
+    $parent_term = taxonomy_get_parents($sub_cat_name);
+    $sub_cat_gender = '';
+    foreach ($parent_term as $key => $value) {
+      $arr = explode('-',trim($value->name));
+      $sub_cat_gender = trim($arr[0]).' '.$term->name;
+    }
+    /*$categories = explode(' ',trim($form_state['values']['sub_catid']));
+    $sub_cat_name = '';
+    if(!empty($categories[1])){
+      $sub_cat_name = trim($categories[1]);
+      $sub_cat_gender = trim($categories[0]);
+    }else{
+      $sub_cat_name = trim($form_state['values']['sub_catid']);
+      $sub_cat_gender = '';
+    }*/
+    $subcat_jobs = array_filter($form_state['values']['sub_cat_job']);
+    $subcat_jobs_arr = '';
+    foreach ($subcat_jobs as $key) {
+      $subcat_jobs_arr.=','.$key;
+    }
+    $final_sub_cat_jobs = trim($subcat_jobs_arr,",");
+    db_insert('subcategory_jobs')
+    ->fields(array('subcat_job_name' => $sub_cat_name,'subcat_job_type'=>$final_sub_cat_jobs,'subcat_job_gender'=>$sub_cat_gender))
+    ->execute();
+  }
+
+  $form_state['rebuild'] = TRUE;
+}
+
+function _image_recognition_subcat_jobs_save($form, $form_state) {
+  $query = "SELECT scj.subcat_jobs_id,ttd.name subcat_job_name,scj.subcat_job_gender, subcat_job_gender, GROUP_CONCAT(irj.job_type) job_type
+            FROM subcategory_jobs scj
+            LEFT JOIN image_recognition_jobs irj ON FIND_IN_SET(image_job_id,subcat_job_type)
+            LEFT JOIN taxonomy_term_data ttd ON ttd.tid=scj.subcat_job_name
+            GROUP BY subcat_job_name ORDER BY subcat_jobs_id";
+  $jobs_list = db_query($query);
+  foreach ($jobs_list as $jobs) {
+    $arr = explode(' ',trim($jobs->subcat_job_gender));
+    $sub_cat_gender = trim($arr[0]);
+    $rows[] = array(
+      'data' => array(
+        $jobs->subcat_job_name,
+        $sub_cat_gender,
+        $jobs->job_type,
+        //l('Edit','admin/config/image_recognition/jobs/edit/'.$jobs->subcat_jobs_id),
+        'Edit',
+        l('Delete','admin/config/image_recognition/subcat_jobs/delete/'.$jobs->subcat_jobs_id),
+      )
+    );
+  }
+
+  $header = array(
+    array('data' => 'Sub Categories'),
+    array('data' => 'Gender'),
+    array('data' => 'Jobs to be executed'),
+    array('data' => 'Edit'),
+    array('data' => 'Delete'),
+  );
+
+  $html = theme('table',
+        array(
+          'header' => $header,
+          'rows'=>$rows,
+          'caption' => 'Image Recognition Jobs', //Optional Caption for the table
+          'sticky' => TRUE,           //Optional to indicate whether the table headers should be sticky
+          'empty' => 'No jobs added...',   //Optional empty text for the table if resultset is empty
+        )
+      );
+  return array(
+    '#markup' => '<div id="image_recognition_job_output">'.$html.'</div>',
+  );
+}
+
+function image_recognition_subcat_jobs_delete($form, &$form_state, $image_job_id) {
+  $form = array();
+  $form['image_job_id'] = array(
+    '#type' => 'value',
+    '#value' => $image_job_id,
+  );
+  return confirm_form($form,
+    t('Are you sure you want to delete this Sub Category Job?'),
+    'admin/config/image_recognition/jobs',
+    t('This action cannot be undone.'),
+    t('Delete'),
+    t('Cancel')
+  );
+  return $form;
+}
+
+/**
+ * submit handler for the image_recognition_jobs_delete
+ * this function is invoked only when the user clicks confirm button
+ * clickin on cancel, the user goes back to the $path
+ */
+function image_recognition_subcat_jobs_delete_submit($form, &$form_state) {
+  if (isset($form_state['values']['image_job_id'])) {
+    $image_job_id = $form_state['values']['image_job_id'];
+    $delete_result = db_delete('subcategory_jobs')
+            ->condition('subcat_jobs_id',$image_job_id)
+            ->execute();
+  }
+  drupal_set_message('Image Recognition Job deleted successfully');
+  $form_state['redirect'] = 'admin/config/image_recognition/subcat_jobs';
+}
+
+function _image_recognition_call_curl($fid){
+  /*$data = array(
+    'job_id'         => '20150807-114008-3e13',
+    'image_url'      => $filepath,
+  );*/
+
+  /*$curl = curl_init();
+  curl_setopt($curl, CURLOPT_URL, 'http://54.174.93.25:5000/models/images/classification/classify_one.json');
+  curl_setopt($curl, CURLOPT_FOLLOWLOCATION, TRUE);
+  curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
+  curl_setopt($curl, CURLOPT_POST, TRUE);
+  curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
+  curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, '30');
+  $response = curl_exec($curl);
+  curl_close($curl);*/
+  /*$response = '{
+  "predictions": [
+    [
+      "pink",
+      64.73
+    ],
+    [
+      "orange",
+      28.06
+    ],
+    [
+      "brown",
+      7.08
+    ],
+    [
+      "green",
+      0.13
+    ],
+    [
+      "yellow",
+      0.01
+    ]
+  ]
+}';
+  return $response;*/
+
+  $file = file_load($fid);
+  $uri = $file->uri;
+  $filepath = file_create_url($uri);
+  $data = array(
+    'job_id'         => '20150807-114008-3e13',
+    'image_url'      => $filepath,
+  );
+  /*$curl = curl_init();
+  curl_setopt($curl, CURLOPT_URL, 'http://54.174.93.25:5000/models/images/classification/classify_one.json');
+  curl_setopt($curl, CURLOPT_FOLLOWLOCATION, TRUE);
+  curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
+  curl_setopt($curl, CURLOPT_POST, TRUE);
+  curl_setopt($curl, CURLOPT_RETURNTRANSFER, TRUE);
+  curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+  curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, '30');
+  $response = curl_exec($curl);
+  curl_close($curl);*/
+  $response = '{
+    "predictions": [
+      [
+        "pink",
+        64.73
+      ],
+      [
+        "orange",
+        28.06
+      ],
+      [
+        "brown",
+        7.08
+      ],
+      [
+        "green",
+        0.13
+      ],
+      [
+        "yellow",
+        0.01
+      ]
+    ]
+  }';
+  $color_value = '';
+  $color_predictions = drupal_json_decode($response);
+  if(isset($color_predictions['predictions'])){
+    $color_value = $color_predictions['predictions'][0][0];
+    drupal_json_output($color_value);
+  }
+}
+
+function callCURLByJobId($job_id, $image_path){
+  $ch = curl_init();
+  curl_setopt($ch, CURLOPT_URL,"http://54.174.93.25:5000/models/images/classification/classify_one.json");
+  curl_setopt($ch, CURLOPT_POST, 1);
+  curl_setopt($ch, CURLOPT_POSTFIELDS,
+              http_build_query(array('job_id'=>$job_id,'image_url'=>$image_path)));
+
+  // receive server response ...
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+  curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 1.0.3705; .NET CLR 1.1.4322)');
+
+  $server_output = curl_exec ($ch);
+  curl_close ($ch);
+  $predictions = json_decode($server_output);
+  if(isset($predictions->predictions)){
+    return $predictions->predictions;
+  } else {
+
+  }
+}
+
+function _get_irs_job_ids(){
+  $job_ids = db_select('image_recognition_jobs', 'irj')
+    ->fields('irj', array('job_type','job_id'))
+    ->execute()->fetchAll(PDO::FETCH_ASSOC);
+  $jobIds_list = [];
+  foreach ($job_ids as $key => $value) {
+     $jobIds_list[strtolower($value['job_type'])] = $value['job_id'];
+  }
+  return $jobIds_list;
+}
+
+function _image_recognition_predictions_old($image_path) {
+  $jobIds = [
+    'gender' => '20150811-095045-b629',
+    'category' => '20150811-095045-b629',
+    'color' => '20150811-115918-ce66',
+    'pattern' => '20150812-182217-e87b',
+    'neck' => '',
+    'sleev' => '',
+  ];
+  //$jobIds = _get_irs_job_ids();
+  $irsPredictions = [];
+
+  if(array_key_exists('gender',$jobIds)){
+    $genderPredictions = callCURLByJobId($jobIds['gender'], $image_path);
+    $irsPredictions['gender'] = $genderPredictions[0];
+
+
+      if (!array_key_exists('category', $irsPredictions)) {
+        $categoryPredictions = callCURLByJobId($jobIds['category'], $image_path);
+        $irsPredictions['category'] = $categoryPredictions[0];
+      }
+      if($categoryPredictions[0] == 'tshirt') {
+        if (!array_key_exists('neck', $irsPredictions)) {
+          $neckPredictions = callCURLByJobId($jobIds['neck'], $image_path);
+          $irsPredictions['neck'] = $neckPredictions[0];
+        }
+
+        if (!array_key_exists('sleev', $irsPredictions)) {
+          $sleevPredictions = callCURLByJobId($jobIds['sleev'], $image_path);
+          $irsPredictions['sleev'] = $sleevPredictions[0];
+        }
+      }
+
+      if($categoryPredictions[0] == 'shirt') {
+        // sleev->full/half, type->formal/partywear/casual
+        if (!array_key_exists('sleev', $irsPredictions)) {
+          $sleevPredictions = callCURLByJobId($jobIds['sleev'], $image_path);
+          $irsPredictions['sleev'] = $sleevPredictions[0];
+        }
+      }
+
+
+      if($categoryPredictions[0] == 'jeans') {
+      }
+
+      if($categoryPredictions[0] == 'shoes') {
+      }
+      //if($genderPredictions[0] == 'men') {
+
+      //} else if($genderPredictions[0] == 'women') {
+
+      /*} else { //Unisex
+
+      }*/
+  }
+  if(array_key_exists('color',$jobIds)){
+    $colorPredictions = callCURLByJobId($jobIds['color'], $image_path);
+    $irsPredictions['color'] = $colorPredictions[0];
+  }
+
+  if(array_key_exists('pattern',$jobIds)){
+    $colorPredictions = callCURLByJobId($jobIds['pattern'], $image_path);
+    $irsPredictions['pattern'] = $colorPredictions[0];
+  }
+
+  //$final_prediction = array('shirts','purple','polka');
+  $predictions = implode(" ", [$irsPredictions['gender'][0], $irsPredictions['color'][0],$irsPredictions['pattern'][0], $irsPredictions['category'][0]]);
+  return $predictions;
+}
+
+
+/**
+* Implements of hook_services_resources().
+*/
+function image_recognition_services_resources() {
+  $resource = array(
+    'image_recognition' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Image Recognition System',
+          'callback' => '_image_recognition_predictions',
+          'access callback' => '_image_recognition_provide_access',
+          'access arguments' => array('view'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'img',
+              'optional' => FALSE,
+              'source' => array('param' => 'img'),
+              'type' => 'string',
+              'description' => 'Image path',
+            ),
+            array(
+              'name' => 'cat_id',
+              'optional' => FALSE,
+              'source' => array('param' => 'cat_id'),
+              'type' => 'int',
+              'description' => 'Sub Category Id',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return $resource;
+}
+
+/** * Access callback */
+function _image_recognition_provide_access() {
+  return TRUE;
+}
+
+/**
+ * Get the color from the image
+ */
+function _image_recognition_get_color($fid) {
+  module_load_include('php', 'image_recognition',  '/includes/colors.inc');
+  $file = file_load($fid);
+  $uri = $file->uri;
+  $filepath = file_create_url($uri);
+
+  $delta = 24;
+  $reduce_brightness = true;
+  $reduce_gradients = true;
+  $num_results = 20;
+  $ex=new GetMostCommonColors();
+  $ex->image = $filepath;
+  $colors=$ex->Get_Color($num_results, $reduce_brightness, $reduce_gradients, $delta);
+  drupal_set_message(print_r($colors,1));
+
+  $output = '';
+  $output.='<table><tr><td>Color</td><td>Color Code</td><td>Percentage</td>';
+  foreach ( $colors as $hex => $count )
+  {
+    if ( $count > 0 )
+    {
+      $output.="<tr><td style=\"background-color:#".$hex.";\"></td><td>".$hex."</td><td>$count</td></tr>";
+    }
+  }
+  $output.='</table>';
+  return $output;
+}
+
+
+function _image_recognition_predictions($image_path,$cat_id) {
+  $jobs = _get_subcat_jobs($cat_id);
+  $irsPredictions = [];
+  $final_prediction = '';
+  foreach ($jobs as $job => $value) {
+    $split_gender = explode(' ',trim($value->gender));
+    $find_gender = strpos($final_prediction,$split_gender[0]);
+    if($find_gender === false){
+      $final_prediction.=trim($split_gender[0]);
+    }
+    $predictions = callCURLByJobId($value->job_id, $image_path);
+    $irsPredictions[$value->job_type] = $predictions[0];
+    //echo "<pre>";print_r($predictions);
+    /*if (($predictions[0][1] - $predictions[1][1]) > 5) {
+      $irsPredictions[$value->job_type] = $predictions[0][0] . ' ' . $predictions[1][0];
+    } else {
+      $irsPredictions[$value->job_type] = $predictions[0][0];
+    }*/
+    if ($predictions[0][1] > 60) {
+      $irsPredictions[$value->job_type] = $predictions[0][0];
+    } else {
+      $irsPredictions[$value->job_type] = $predictions[0][0] . ' ' . $predictions[1][0];
+    }
+
+    //echo "<pre>";print_r($irsPredictions);
+    if(!empty($irsPredictions[$value->job_type][0])){
+      $final_prediction.=' '.$irsPredictions[$value->job_type];
+    }
+  }
+  $final_prediction.=' '.$split_gender[1];
+  return $final_prediction;
+}
+
+
+/**
+ * Get the jobs to be executed for the sub category
+ */
+function _get_subcat_jobs($cat_id){
+  $query = "SELECT job_id, job_type,subcat_job_gender gender FROM subcategory_jobs scj
+          LEFT JOIN image_recognition_jobs irj ON FIND_IN_SET(image_job_id,subcat_job_type)
+          WHERE subcat_job_name = '".$cat_id."'";
+  $jobs_list = db_query($query);
+  return $jobs_list;
+}
+
+/**
+ * Get all sub categories by main cat id
+ */
+function _get_all_sub_categories($main_cat_id){
+  $child_categories = taxonomy_get_children($main_cat_id);
+  $subcategories = array();
+  $i=0;
+  $output = '<li><input type="text" class="irs-main-categories" id="irs-main-categories-list" name="" value="" placeholder="Select Sub-Category" readonly /></li>';
+  foreach ($child_categories as $key => $value) {
+    $subcategories[$i]['id'] = $value->tid;
+    $subcategories[$i]['name'] = $value->name;
+    $i++;
+    $output.='<li id="'.$value->tid.'"><a href="javascript:">'.$value->name.'</li>';
+  }
+  drupal_json_output($subcategories);
+}
+

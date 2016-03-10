@@ -1,0 +1,43 @@
+<?php
+/**
+ * @file
+ * Request statistics record data for visitor and page.
+ */
+
+/**
+ * Return the common code.
+ */
+function request_statistics_record() {
+  static $rsr;
+  if (!isset($rsr)) {
+    $rsr = new RequestStatisticsRecord(request_statistics());
+  }
+  return $rsr;
+}
+
+/**
+ * Implements hook_init().
+ *
+ * Add information about user if logged in.
+ */
+function request_statistics_record_init() {
+  if (user_is_logged_in()) {
+    request_statistics_record()->init();
+  }
+}
+
+/**
+ * Implements hook_menu().
+ *
+ * Hook menu is called only when someone updates a menu.
+ */
+function request_statistics_record_menu() {
+  return request_statistics_record()->menu();
+}
+
+/**
+ * Called from Javascript.
+ */
+function request_statistics_record_page_callback() {
+  return request_statistics_record()->pageCallback();
+}

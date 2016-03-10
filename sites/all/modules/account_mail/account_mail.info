@@ -1,0 +1,11 @@
+name = Account mail
+description = Provides a Field API widget to edit the mail field of Drupal user accounts..
+core = 7.x
+files[] = account_mail.test
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "account_mail"
+datestamp = "1380552274"
+

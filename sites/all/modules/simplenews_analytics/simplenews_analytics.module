@@ -1,0 +1,58 @@
+<?php
+
+/**
+ * @file
+ * Add Google Analytics tags to links in simplenews emails.
+ */
+ 
+/**
+ * Implementation of hook_menu().
+ */
+function simplenews_analytics_menu() {
+  $items['admin/config/services/simplenews/settings/google_analytics'] = array(
+    'title' => 'Google Analytics',
+    'description' => 'Add google Analytics tags to newsletter links.',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('simplenews_analytics_admin'),
+    'access arguments' => array('administer simplenews settings'),
+    'file' => 'simplenews_analytics.inc',
+    'weight' => -7.9,
+  );
+
+  return $items;
+}
+
+/**
+ * Implemetation of hook_mail_alter().
+ *
+ * Add Google Analytics codes to email links.
+ * 
+ * @param $message
+ *  Mail message array.
+ */
+function simplenews_analytics_mail_alter(&$message) {
+  if (strpos($message['id'], 'simplenews') !== FALSE) {
+    // Parse message body array.
+    if (isset($message['body'])) {
+      module_load_include('inc', 'simplenews_analytics');
+      _simplenews_analytics_get_context($message['params']);
+      _simplenews_analytics_parse_body($message['body']);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function simplenews_analytics_help($path, $arg) {
+  switch ($path) {
+    case 'admin/help#simplenews_analytics':
+      $help = '<p>'. t('Simplenews Google Analytics adds tags to links in in the email. This helps you to track clicks in your email newsletters with Google Analytics.') ."<br />\n";
+      $help .= t("Permission 'administer simplenews settings' is used. No additional permissions are required.") ."</p>\n";
+      return $help;
+    case 'admin/config/services/simplenews/settings/google_analytics':
+      $help = '<p>'. t('See <a href="!ga_url">Google Analytics URL builder</a> for tag information and examples.', array('!ga_url' => 'http://www.google.com/support/googleanalytics/bin/answer.py?hl=en&answer=55578')) ."</p>\n";
+      return $help;
+  }
+}

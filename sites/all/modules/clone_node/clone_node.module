@@ -1,0 +1,60 @@
+<?php
+
+/**
+ * hook_menu
+ */
+function clone_node_menu() {
+    $items = array();
+
+    $items['clone_post/rec'] = array(
+      'title' => 'clone node',
+      'page callback' => 'clone_node_callback',
+      'access arguments' => array('access content'),
+      'page arguments' => array(1),
+      'type' => MENU_CALLBACK,
+    );
+
+
+    return $items;
+}
+
+function clone_node_callback($nid, $comment, $form, $form_state) {
+    $rec_nid = $_GET['nid'];
+    $rec_image = $_GET['media'];
+    $rec_url = $_GET['url'];
+     $rec_title = $_GET['description'];
+      $rec_price = $_GET['price'];
+    global $user,$base_url;
+   $filename = 'image.jpg';
+$image = file_get_contents($rec_image);
+$file = file_save_data($image, 'public://bookmark/' . $filename, FILE_EXISTS_RENAME);
+//$node->field_image = array(LANGUAGE_NONE => array('0' => (array)$file));
+ $comment = new stdClass();
+$comment->nid = $rec_nid; // nid of a node you want to attach a comment to
+$comment->cid = 0; // leave it as is
+$comment->pid = 0; // parent comment id, 0 if none 
+$comment->uid = $user->uid; // user's id, who left the comment
+$comment->mail = $user->mail; // user's email
+//$comment->name = 'admin'; // If user is authenticated you can omit this field, it will be auto-populated, if the user is anonymous and you want to name him somehow, input his name here
+//$comment->thread = '01/'; // OPTIONAL. If you need comments to be threaded you can fill this value. Otherwise omit it.
+//$comment->hostname = '127.0.01' // OPTIONAL. You can log poster's ip here
+$comment->created = time(); // OPTIONAL. You can set any time you want here. Useful for backdated comments creation.
+$comment->is_anonymous = 0; // leave it as is
+//$comment->homepage = ''; // you can add homepage URL here
+$comment->status = COMMENT_PUBLISHED; // We auto-publish this comment
+$comment->language = LANGUAGE_NONE; // The same as for a node
+//$file_temp = file_get_contents('http://comm-press.de/sites/all/themes/cpzen/logo.png');
+//$comment->[files][field_suggestion_image_und_0]
+$comment->field_suggestion_image = array(LANGUAGE_NONE => array('0' => (array)$file));
+  //$comment->field_suggestion_image = = array(LANGUAGE_NONE => array('0' => (array)$file));
+$comment-> field_suggestion_title[$comment->language][0]['value'] = $rec_title; // Everything here is pretty much like with a node
+$comment-> field_suggestion_source['und'][0]['url'] = $rec_url; 
+$comment-> field_suggestion_price['und']['0']['value'] = $rec_price; 
+//$comment->field_custom_field_name[LANGUAGE_NO
+comment_submit($comment); // saving a comment
+comment_save($comment);
+//$hellow = 
+    //drupal_goto(url('rec-view'.'?'.'nid'.'='.$rec_nid));
+    $options = array('query' => array('nid' => $rec_nid));
+drupal_goto('rec-view', $options);
+}

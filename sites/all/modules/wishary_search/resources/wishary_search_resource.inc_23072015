@@ -1,0 +1,409 @@
+<?php
+
+function _get_search_suggestions_results($search_keyword,$search_type,$offset=0,$limit=10,$node_type='all'){
+    if($search_type == 'suggestions'){
+        _services_search_category_retrieve($search_keyword,'json',$node_type);
+    } else if($search_type == 'results'){
+        _services_search_results($search_keyword,$offset,$limit,'json',$node_type);
+    }
+}
+/**
+* Function to retrieve the Main Categories for search
+* Parameter : $search_keyword - Search based on the keyword
+*
+**/
+function _services_search_category_retrieve($search_keyword,$type='json',$node_type='all'){
+    //$search_keyword = str_replace('+-+','+',urlencode($search_keyword));
+  $search_keyword = str_replace('+-+','+',$search_keyword);
+    $search_keyword_array = explode("+", $search_keyword);
+    if($node_type == 'all' || $node_type == 'pin') {
+       $suggestions_query = "SELECT
+        if(hr.parent='0', maincat.tid, subcat.tid) main_category_tid,
+        if(hr.parent='0', maincat.name, subcat.name) main_category,
+        if(hr.parent='0', subcat.tid, maincat.tid)sub_category_tid,
+        if(hr.parent='0', subcat.name, maincat.name) sub_category,
+        count(if(hr.parent='0', maincat.name, subcat.name)) main_cat_count,
+        count(if(hr.parent='0', subcat.name, maincat.name)) sub_cat_count,
+        count(color_term.name) color_count,
+        count(brand_term.name) brand_count,
+        color_term.tid color_tid, color_term.name color,brand_term.tid brand_tid, brand_term.name brand
+        FROM field_data_body bf
+        LEFT JOIN  field_data_field_category1 cat ON cat.entity_id = bf.entity_id
+        LEFT JOIN  taxonomy_term_data maincat ON maincat.tid = cat.field_category1_tid
+        LEFT JOIN  taxonomy_term_hierarchy hr ON hr.tid = maincat.tid
+        LEFT JOIN  taxonomy_term_data subcat ON subcat.tid = hr.parent
+        LEFT JOIN  field_data_field_color_list col ON (col.entity_id = bf.entity_id AND col.bundle='pin')
+        LEFT JOIN  taxonomy_term_data color_term ON color_term.tid = col.field_color_list_tid
+        LEFT JOIN  field_data_field_brand brand ON (brand.entity_id = bf.entity_id AND brand.bundle='pin')
+        LEFT JOIN  taxonomy_term_data brand_term ON brand_term.tid = brand.field_brand_tid WHERE ";
+        foreach ($search_keyword_array as $key => $value) {
+            $suggestions_query.= " (bf.body_value LIKE '%".$value."%') AND ";
+        }
+
+        $suggestions_query.= " (bf.bundle='pin' or bf.bundle='expression' or bf.bundle='article') GROUP BY Main_category,sub_category, color, brand ORDER BY main_cat_count DESC, sub_cat_count DESC,color_count DESC,brand_count DESC";
+
+        $suggestions_results = db_query($suggestions_query, array(':term' => '%' . db_like($search_keyword).'%'));
+
+        $suggestions_list_array = array();
+        $i=0;
+        foreach($suggestions_results as $suggestions) {
+            $suggestions_list_array[$i]['main_category_tid'] = $suggestions->main_category_tid;
+            $suggestions_list_array[$i]['main_category'] = $suggestions->main_category;
+            $suggestions_list_array[$i]['sub_category_tid'] = $suggestions->sub_category_tid;
+            $suggestions_list_array[$i]['sub_category'] = $suggestions->sub_category;
+            $suggestions_list_array[$i]['color_tid'] = $suggestions->color_tid;
+            $suggestions_list_array[$i]['color'] = $suggestions->color;
+            $suggestions_list_array[$i]['brand_tid'] = $suggestions->brand_tid;
+            $suggestions_list_array[$i]['brand'] = $suggestions->brand;
+            $i++;
+        }
+        if($type=='json') {
+            $suggestions_list_array = json_decode(json_encode((array)$suggestions_list_array),TRUE);
+            drupal_json_output($suggestions_list_array);
+            drupal_exit();
+    }else{
+        return $suggestions_list_array;
+    }
+    } else {
+        drupal_json_output('');
+        drupal_exit();
+    }
+}
+
+function _services_search_results_old($search_keyword, $offset, $limit, $type='json', $node_type='all') {
+    $search_keyword_array = explode("+", urlencode($search_keyword));
+    $search_keyword_array = array_values(array_unique($search_keyword_array));
+
+$results_query = "SELECT ff.entity_id as entity_id, ";
+    if($node_type == 'pin' || $node_type == 'expression'){
+        $results_query.= "ff.body_value AS body_value, ";
+    } else {
+        $results_query.= "ff.title_field_value AS body_value, ";
+    }
+    $results_query.= "ff.totaltermFrequency AS totaltermFrequency, ff.wordCount AS wordCount, totaltermFrequency * LOG(wordCount / totaltermFrequency, 2) AS tfidf
+        FROM ( SELECT bf.entity_id, ";
+        if($node_type == 'pin' || $node_type == 'expression'){
+            $results_query.= "bf.body_value, ";
+        } else {
+            $results_query.= "bf.title_field_value, ";
+        }
+        if($node_type == 'pin'){
+            $results_query.= "subcat.name Subcategory, maincat.name Maincategory,color.name, ";
+        }
+        $results_query.= "(";
+        foreach ($search_keyword_array as $key => $value) {
+            if($node_type == 'pin' || $node_type == 'expression'){
+                $results_query.= "ROUND((LENGTH(body_value) - LENGTH(REPLACE(lower(bf.body_value), lower('".$value."'), ''))) / LENGTH('".$value."'))  ";
+            } else {
+                $results_query.= "ROUND((LENGTH(title_field_value) - LENGTH(REPLACE(lower(bf.title_field_value), lower('".$value."'), ''))) / LENGTH('".$value."'))  ";
+            }
+            if($key != (count($search_keyword_array)-1)){
+               $results_query.= " + ";
+            }
+        }
+        if($node_type == 'pin' || $node_type == 'expression'){
+            $results_query.= ") AS totaltermFrequency, LENGTH(bf.body_value) - LENGTH(REPLACE(bf.body_value, ' ', '')) + 1 AS wordCount ";
+        } else {
+            $results_query.= ") AS totaltermFrequency, LENGTH(bf.title_field_value) - LENGTH(REPLACE(bf.title_field_value, ' ', '')) + 1 AS wordCount ";
+        }
+          $results_query.= "FROM ";
+
+        if($node_type == 'pin' || $node_type == 'expression'){
+            $results_query.= "field_data_body bf ";
+        } else {
+            $results_query.= "field_data_title_field bf ";
+        }
+        if($node_type == 'pin'){
+            $results_query.= "LEFT JOIN field_data_field_category1 cat ON cat.entity_id = bf.entity_id
+            LEFT JOIN taxonomy_term_data maincat ON maincat.tid = cat.field_category1_tid
+            LEFT JOIN taxonomy_term_hierarchy hr ON hr.tid = maincat.tid
+            LEFT JOIN taxonomy_term_data subcat ON subcat.tid = hr.parent
+            LEFT JOIN field_data_field_color_list col ON (col.entity_id = bf.entity_id AND col.bundle='pin')
+            LEFT JOIN taxonomy_term_data color ON col.field_color_list_tid = color.tid
+            LEFT JOIN field_data_field_brand brand ON (brand.entity_id = bf.entity_id AND brand.bundle='pin')
+            LEFT JOIN taxonomy_term_data brand_term ON brand_term.tid = brand.field_brand_tid
+            JOIN field_data_field_parent_nid parent_nid ON (bf.entity_id = parent_nid.entity_id AND parent_nid.field_parent_nid_value=0)";
+        }
+          $results_query.=" WHERE ";
+          foreach ($search_keyword_array as $key => $value) {
+            if($node_type == 'pin' || $node_type == 'expression'){
+                $results_query.= " (bf.body_value LIKE '%".$value."%') AND ";
+            } else {
+                $results_query.= " (bf.title_field_value LIKE '%".$value."%') AND ";
+            }
+          }
+          $results_query.= "(bf.bundle='".$node_type."'))";
+        //$results_query.= "(bf.bundle='pin' or bf.bundle='expression' or bf.bundle='article'))";
+        $results_query.= " ff ORDER BY tfidf DESC";
+        if($type=='json') {
+            $results_query.=  " LIMIT $offset, $limit";
+        }
+
+    echo $results_query;exit;
+    //$search_results = db_query($results_query, array(':term' => '%#' . db_like($search_word).'%',':body_term' => $search_word));
+    $search_results = db_query($results_query);
+    $records = $search_results->fetchAll();
+    $search_results_list = array();
+    $i=0;
+    foreach ($records as $record) {
+      $search_results_list[$i] = $record->entity_id;
+      $i++;
+    }
+    if($type=='json') {
+        drupal_json_output($search_results_list);
+        drupal_exit();
+    } else {
+        return $search_results_list;
+    }
+}
+
+function _blogs_search_lists($search_word=NULL,$offset=NULL,$limit=NULL){
+  //$search_tags = ['chic', 'brand'];
+  //$search_tags = explode("+", urlencode($search_word));
+  $search_tags = explode("+", $search_word);
+  $search_tags = array_values(array_unique($search_tags));
+  //$search_tags = ['Wishary', 'brand'];
+  $w_term_frequencies = [];
+  $w_word_count = [];
+  $a_term_frequencies = [];
+  $w_term_frequencie_or = [];
+  $w_term_frequencie_where = [];
+  $a_term_frequencie_where = [];
+
+  foreach ($search_tags as $tag) {
+    foreach (['TD.tags', 'FB.field_blog_body_value', 'FT.title_field_value'] as $table_name) {
+      $w_term_frequencies[] = "ROUND((
+        LENGTH({$table_name}) - LENGTH( REPLACE ( lower({$table_name}),
+          lower('" . $tag . "'), ''))
+        ) / LENGTH('" . $tag . "') )";
+    }
+
+    $a_term_frequencies[] = "ROUND((
+      LENGTH(DT.title_field_value) - LENGTH( REPLACE ( lower(DT.title_field_value),
+        lower('" . $tag . "'), ''))
+      ) / LENGTH('" . $tag . "') )";
+
+    $w_term_frequencie_where[] = "TD.tags LIKE '%" . $tag . "%'";
+    $a_term_frequencie_where[] = "DT.title_field_value LIKE '%" . $tag . "%'";
+  }
+
+  foreach (['TD.tags', 'FB.field_blog_body_value', 'FT.title_field_value'] as $table_name) {
+    $w_word_count[] = "LENGTH({$table_name}) - LENGTH(REPLACE({$table_name}, ' ', '')) + 1";
+  }
+
+  $w_term_frequencies_str = implode('+', $w_term_frequencies);
+  $w_word_count_str = implode('+', $w_word_count);
+  $a_term_frequencies_str = implode('+', $a_term_frequencies);
+  $w_term_frequencie_where_str = implode(' OR ', $w_term_frequencie_where);
+  $a_term_frequencie_where_str = implode(' OR ', $a_term_frequencie_where);
+
+  $results_query = "SELECT
+      ff.entity_id as entity_id,
+      ff.title AS title,
+      ff.termFrequency AS termFrequency,
+      ff.wordCount AS wordCount,
+      termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf,
+      ff.created, ff.wblog
+    FROM (
+      SELECT FD.entity_id, CONCAT(TD.tags, ' ',  FB.field_blog_body_value, ' ', FT.title_field_value) AS title, n.created,
+        ({$w_term_frequencies_str}) AS termFrequency,
+        ({$w_word_count_str}) AS wordCount, 1 as wblog
+      FROM field_data_field_tag_blog FD
+        JOIN (
+          SELECT FD.entity_id, GROUP_CONCAT( CONCAT( TD1.name) SEPARATOR ' ') AS tags, TD1.tid
+          FROM field_data_field_tag_blog FD
+              JOIN taxonomy_term_data TD1
+                ON FD.field_tag_blog_tid = TD1.tid
+          GROUP BY (FD.entity_id)
+        ) AS TD
+          ON FD.field_tag_blog_tid = TD.tid and FD.entity_id = TD.entity_id
+        JOIN field_data_field_blog_body FB
+          ON FD.entity_id = FB.entity_id
+        JOIN field_data_title_field FT
+          ON FD.entity_id = FT.entity_id
+            AND FT.bundle = 'blog'
+        JOIN node n
+          ON FD.entity_id = n.nid
+      WHERE ({$w_term_frequencie_where_str})
+      UNION
+      SELECT DT.entity_id, DT.title_field_value as title, n.created,
+        ({$a_term_frequencies_str}) AS termFrequency,
+        LENGTH(DT.title_field_value) - LENGTH(REPLACE(DT.title_field_value, ' ', '')) + 1 AS wordCount, 0 as wblog
+      FROM   field_data_title_field DT, node n
+      WHERE  DT.entity_id = n.nid
+        AND DT.bundle = 'article'
+        AND ({$a_term_frequencie_where_str})
+    ) ff  ORDER BY tfidf DESC, created DESC ";
+
+  if(isset($offset)){
+      $results_query.=" LIMIT ". $offset.",".$limit;
+  }
+  //echo $results_query;exit;
+  $result = db_query($results_query);
+
+  $records = $result->fetchAll(PDO::FETCH_ASSOC);
+
+  /*
+  // Add quota to blogs of Wishary.
+  $wishary_quota  = (10 / 100) * $records[0]['tfidf'];
+
+  for ($i = 0; $i < count($records); $i++) {
+    if ($records[$i]['wblog'] == 1) {
+      $records[$i]['tfidf'] += $wishary_quota;
+    }
+  }
+
+  // Sort based on updated tfidf value.
+  usort($records, function($a, $b) {
+    return $a['tfidf'] < $b['tfidf'];
+  });
+  */
+
+  $w_entity_ids = $a_entity_ids = [];
+
+  foreach ($records as $record) {
+    if ($record['wblog'] == 1) {
+      $w_entity_ids[] = $record['entity_id'];
+    }
+    else {
+      $a_entity_ids[] = $record['entity_id'];
+    }
+  }
+
+  $entity_ids = array_merge($w_entity_ids, $a_entity_ids);
+
+  /*echo "<pre>";
+  print_r($entity_ids);
+  exit;*/
+
+  //return $query;
+  $blogs_results_list = array();
+  $i=0;
+  //echo "<pre>";print_r($records);
+  foreach ($entity_ids as $record) {
+   $blogs_results_list[$i] = $record;
+   $i++;
+  }
+  //exit;
+  return $blogs_results_list;
+}
+
+function _services_search_results($search_keyword, $offset, $limit, $type='json', $node_type='all') {
+    //$search_keyword_array = explode("+", urlencode($search_keyword));
+  $search_keyword_array = explode("+", $search_keyword);
+    $search_keyword_array = array_values(array_unique($search_keyword_array));
+
+    $results_pre_query = "SELECT
+    ff.entity_id AS entity_id,
+    ff.body_value AS body_value,
+    ff.totaltermFrequency AS termFrequency,
+    ff.wordCount AS wordCount,
+    ff.created AS created,
+    ff.totaltermFrequency * LOG(wordCount / ff.totaltermFrequency, 2) AS tfidf
+  FROM (";
+
+  if( $node_type=='all') {
+    $node_types = ['pin', 'expression', 'article'];
+  }
+  else{
+    $node_types = [$node_type];
+  }
+
+  foreach($node_types as $node_type) {
+    $results_query = "SELECT
+        bf.entity_id,";
+
+    if($node_type == 'article'){
+      $results_query .= "bf.title_field_value AS body_value,(";
+    }
+    else {
+      $results_query .= "bf.body_value,(";
+    }
+
+    foreach ($search_keyword_array as $key => $value) {
+        if($node_type == 'pin' || $node_type == 'expression'){
+            $results_query.= "ROUND((LENGTH(bf.body_value) - LENGTH(REPLACE(lower(bf.body_value), lower('".$value."'), ''))) / LENGTH('".$value."'))  ";
+        } else {
+            $results_query.= "ROUND((LENGTH(bf.title_field_value) - LENGTH(REPLACE(lower(bf.title_field_value), lower('".$value."'), ''))) / LENGTH('".$value."'))  ";
+        }
+        if($key != (count($search_keyword_array)-1)){
+           $results_query.= " + ";
+        }
+    }
+
+    if($node_type == 'pin' || $node_type == 'expression'){
+        $results_query.= ") AS totaltermFrequency, LENGTH(bf.body_value) - LENGTH(REPLACE(bf.body_value, ' ', '')) + 1 AS wordCount ";
+    } else {
+        $results_query.= ") AS totaltermFrequency, LENGTH(bf.title_field_value) - LENGTH(REPLACE(bf.title_field_value, ' ', '')) + 1 AS wordCount ";
+    }
+
+    $results_query.= ", n.created
+      FROM ";
+
+        if($node_type == 'pin' || $node_type == 'expression'){
+            $results_query.= "field_data_body bf ";
+        } else {
+            $results_query.= "field_data_title_field bf ";
+        }
+
+        if($node_type == 'pin'){
+            $results_query.= "LEFT JOIN field_data_field_category1 cat ON cat.entity_id = bf.entity_id
+            LEFT JOIN taxonomy_term_data maincat ON maincat.tid = cat.field_category1_tid
+            LEFT JOIN taxonomy_term_hierarchy hr ON hr.tid = maincat.tid
+            LEFT JOIN taxonomy_term_data subcat ON subcat.tid = hr.parent
+            LEFT JOIN field_data_field_color_list col ON (col.entity_id = bf.entity_id AND col.bundle='pin')
+            LEFT JOIN taxonomy_term_data color ON col.field_color_list_tid = color.tid
+            LEFT JOIN field_data_field_brand brand ON (brand.entity_id = bf.entity_id AND brand.bundle='pin')
+            LEFT JOIN taxonomy_term_data brand_term ON brand_term.tid = brand.field_brand_tid
+            JOIN field_data_field_parent_nid parent_nid ON (bf.entity_id = parent_nid.entity_id AND parent_nid.field_parent_nid_value=0)
+            JOIN node n";
+        }else{
+        $results_query.=", node n ";
+    }
+       $results_query.=" WHERE";
+
+    foreach ($search_keyword_array as $key => $value) {
+      //if (!in_array($value, ['man', 'men', 'woman', 'women']) ) {
+        $value = '%' . $value . '%';
+      //}
+
+      if($node_type == 'pin' || $node_type == 'expression'){
+          $results_query.= " (bf.body_value LIKE '".$value."') AND ";
+      } else {
+          $results_query.= " (bf.title_field_value LIKE '".$value."') AND ";
+      }
+    }
+
+    $results_query.= "(bf.bundle='".$node_type."')
+        AND n.nid = bf.entity_id";
+
+    $inner_query[] = $results_query;
+
+  }
+
+  $results_post_query = ") ff ORDER BY tfidf DESC, created DESC";
+
+
+  $results_query = implode(' UNION ', $inner_query);
+
+  $results_query =  $results_pre_query . $results_query . $results_post_query;
+  if($type=='json') {
+    $results_query.=  " LIMIT $offset, $limit";
+  }
+  //echo $results_query;exit;
+  //$search_results = db_query($results_query, array(':term' => '%#' . db_like($search_word).'%',':body_term' => $search_word));
+    $search_results = db_query($results_query);
+    $records = $search_results->fetchAll();
+    $search_results_list = array();
+    $i=0;
+    foreach ($records as $record) {
+      $search_results_list[$i] = $record->entity_id;
+      $i++;
+    }
+    if($type=='json') {
+        drupal_json_output($search_results_list);
+        drupal_exit();
+    } else {
+        return $search_results_list;
+    }
+}

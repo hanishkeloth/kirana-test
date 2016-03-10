@@ -1,0 +1,12 @@
+name = PDM Overlay
+description = Adds option to have PDMs display as modal overlays
+package = Persistent dismissable messages (PDM)
+core = 7.x
+dependencies[] = ctools
+dependencies[] = pdm
+; Information added by drupal.org packaging script on 2013-10-01
+version = "7.x-1.0-beta1+9-dev"
+core = "7.x"
+project = "pdm"
+datestamp = "1380622778"
+

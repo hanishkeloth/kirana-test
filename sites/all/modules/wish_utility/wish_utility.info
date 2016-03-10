@@ -1,0 +1,3 @@
+core = "7.x"
+description = "Module for common utility function"
+name = "Wish Utility"

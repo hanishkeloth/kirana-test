@@ -1,0 +1,5 @@
+name = Feeds Tamper File Fetcher
+description = Fetches remote files to local and registers them in the course of a feeds import.
+core = 7.x
+
+dependencies[] = feeds_tamper

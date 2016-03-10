@@ -1,0 +1,72 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ */
+function fboauth_extras_schema() {
+  $schema['fboauth_friends'] = array(
+    'description' => 'Stores friend information for Facebook OAuth connected users',
+    'fields' => array(
+      'id' => array(
+        'description' => 'Unique ID for this entry.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'Drupal user id',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'fbid' => array(
+        'description' => 'Facebook user id',
+        'type' => 'varchar',
+        'length' => '20',
+        'not null' => TRUE,
+        'default' => '0',
+      ),
+      'name' => array(
+        'description' => 'Facebook name',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'first_name' => array(
+        'description' => 'First name',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'last_name' => array(
+        'description' => 'Last name',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'changed' => array(
+        'description' => 'Date updated',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'Status. 0 or 1.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+  
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function fboauth_extras_uninstall() {
+  // Remove variables from settings form.
+  db_query("DELETE FROM {variable} WHERE name LIKE :vars", array(':vars' => 'fboauth_extras_%'));
+}

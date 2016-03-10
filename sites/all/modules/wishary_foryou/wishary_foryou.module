@@ -1,0 +1,222 @@
+<?php
+/**
+ * Implements hook_menu()
+ * @return array
+ */
+function wishary_foryou_menu() {
+
+  $aItems = array(
+      'for_you' => array(
+        'title' => '| Wishary | Discover and Shop the Latest in Fashion | Find new fashion trends| Fashion blogs',
+        'page callback' => '_page_hello_world',
+        'access callback' => TRUE,
+      ),
+    );
+  return $aItems;
+}
+
+/**
+ * Page callback mapped to the url /hello_world
+ *
+ * @return array
+ */
+
+function _page_hello_world($offset,$limit) {
+  global $user;
+//drupal_add_js(drupal_get_path('module', 'wishary_foryou') . '/mymodule.js');
+  // Get the user's hashtags.
+  $query = db_select('flag', 'f');
+  $query->join('flagging', 'fg', 'fg.fid=f.fid');
+  $query->join('taxonomy_term_data', 'term', 'term.tid=fg.entity_id');
+  $query->addField('term', 'name');
+  $query->condition('f.name', 'hashtag', '=');
+  $query->condition('fg.uid', $user->uid, '=');
+  $hashtags_results = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+  $hashtags = array();
+
+  foreach ($hashtags_results as $hashtag) {
+    array_push($hashtags, $hashtag['name']);
+  }
+
+  //$hashtags = array('jacket','denim');
+  if (!empty($hashtags)) {
+    $sum_of_tfidf_of_wishes = foryou_get_tfidf_website($hashtags,$offset,$limit);
+
+    // Add quota to wishes for friends.
+    $friend_quota  = (10 / 100) * max($sum_of_tfidf_of_wishes);
+
+    $friends_wish_list = get_wishes_of_friends_web($user->uid);
+
+    $wishes_result = array_intersect_key($sum_of_tfidf_of_wishes, $friends_wish_list);
+
+    foreach ($wishes_result as $key => $wish) {
+      $sum_of_tfidf_of_wishes[$key] += $friend_quota;
+    }
+
+    // Add quota to wishes for likes.
+    $like_quota  = (1 / 100) * max($sum_of_tfidf_of_wishes);
+    $wishes_with_likes = get_likes_of_wishes_web(array_keys($sum_of_tfidf_of_wishes));
+
+    foreach ($wishes_with_likes as $like_wish) {
+      $sum_of_tfidf_of_wishes[$like_wish['entity_id']] += ($like_quota * $like_wish['likes']);
+    }
+
+    arsort($sum_of_tfidf_of_wishes);
+
+    //$foryou_wishes_list = array();
+  $foryou_wishes_list = array();
+    $i = 0;
+
+    foreach ($sum_of_tfidf_of_wishes as $foryou_wishes => $tfidf) {
+      $foryou_wishes_list[$i] = $foryou_wishes;
+      $i++;
+    }
+
+
+
+
+                $out .= ''.'';
+                $out = '<div class="pin_page">';
+                $oute = '</div>';
+     $result = db_select('node', 'n')->condition('n.type', 'pin', '=')->extend('PagerDefault')->fields('n', array('nid'))->limit(10)->execute()->fetchCol();
+        $per_page = 10;
+         shuffle($foryou_wishes_list);
+        $current_page = pager_default_initialize(count($foryou_wishes_list), $per_page);
+        // Split your list into page sized chunks
+  $chunks = array_chunk($foryou_wishes_list, $per_page, TRUE);
+
+$pp = theme('pager', array('quantity', count($foryou_wishes_list)));
+
+  // Initialise the pager
+
+  // Split your list into page sized chunks
+  $chunks = array_chunk($foryou_wishes_list, $per_page, TRUE);
+        $nodes = node_load_multiple($chunks[$current_page]);
+        $nodes = node_view_multiple($nodes);
+
+
+        if (!$pp or !isset($_GET['page']) or strpos($pp,'page='.$_GET['page']) or strpos($pp, '>'.($_GET['page'] + 1).'<'))
+            $out .= render($nodes);
+        $out .= $oute;
+        $out .= $pp;
+
+  }
+ return $out;
+}
+
+/**
+ * Get the wishids created by the FB friends of the user from the wishid's list.
+ */
+function get_wishes_of_friends_web($user_id) {
+
+  $friends_wish_list = array();
+
+  $friends_lists = db_select('fboauth_friends', 'friends')
+                        ->fields('friends', array('fbid'))
+                        ->condition('friends.uid', $user_id, '=')
+                        ->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+  $friends_lists_array = '';
+
+  if (!empty($friends_lists)) {
+    foreach ($friends_lists as $friends_list) {
+      $friends_lists_array .= $friends_list['fbid'] . ",";
+    }
+  }
+
+  if (!empty($friends_lists_array)) {
+    $friends_lists_array = rtrim($friends_lists_array, ",");
+
+    $query = db_select('node', 'node');
+    $query->join('fboauth_users', 'fb_user', 'fb_user.uid=node.uid');
+    $query->fields('node', array('nid'));
+    $query->condition('fb_user.fbid', array($friends_lists_array), 'IN');
+    $friends_wish_results = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($friends_wish_results)) {
+      foreach ($friends_wish_results as $friends_wish) {
+        $friends_wish_list[$friends_wish['nid']] = $friends_wish['nid'];
+      }
+    }
+  }
+
+  return $friends_wish_list;
+}
+
+/**
+ * Get the likes of the wishes.
+ */
+function get_likes_of_wishes_web($wishes) {
+  $likes_of_wishes = [];
+
+  $query = db_select('votingapi_vote', 'vote')
+            ->fields('vote', array('entity_id'))
+            ->condition('vote.entity_id', $wishes, 'IN')
+            ->groupBy('vote.entity_id');
+
+  $query->addExpression('COUNT(vote.entity_id)', 'likes');
+
+  $likes_of_wishes = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+  return $likes_of_wishes;
+}
+
+function foryou_get_tfidf_website($hashtags,$offset,$limit) {
+  $sum_of_tfidf_of_wishes = [];
+
+  $offset = 0;
+  $limit = 10;
+    $body_value = "f.body_value AS body_value";
+
+
+  $term_frequencies = [];
+  $term_frequencie_where = [];
+
+  foreach ($hashtags as $hashtag) {
+    if (empty($hashtag)) {
+      continue;
+    }
+    $hashtag = str_replace('#','',$hashtag);
+    $term_frequencies[] = "ROUND((
+                    LENGTH(body_value)
+                    - LENGTH( REPLACE ( lower(f.body_value), lower('" . $hashtag . "'), '') )
+                ) / LENGTH('" . $hashtag . "') )";
+    $term_frequencie_where[] = "f.body_value LIKE '%" . $hashtag . "%'";
+  }
+
+  $term_frequencies_str = implode('+', $term_frequencies);
+  $term_frequencie_where_str = '(' . implode(' OR ', $term_frequencie_where) . ')';
+
+  $query = "SELECT ff.entity_id as entity_id,
+    ff.body_value AS body_value, ff.termFrequency AS termFrequency,
+    ff.wordCount AS wordCount, termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf, ff.created
+  FROM
+  (SELECT f.entity_id AS entity_id, {$body_value}, ({$term_frequencies_str}) AS termFrequency,
+                LENGTH(f.body_value) - LENGTH(REPLACE(f.body_value, ' ', '')) + 1 AS wordCount, n.created
+  FROM
+  field_data_body f, node n
+  WHERE  f.bundle = 'pin'
+  AND n.nid = f.entity_id
+  AND n.status=1
+  AND {$term_frequencie_where_str}
+   ) ff
+  ORDER BY tfidf DESC, created DESC";
+  //echo "query=".$query;exit;
+  $result = db_query($query);
+  //$query = $query->extend('PagerDefault')->limit(2);
+  $records = $result->fetchAll();
+
+  foreach ($records as $record) {
+    if ($record->tfidf) {
+      if (isset($sum_of_tfidf_of_wishes[$record->entity_id])) {
+        $sum_of_tfidf_of_wishes[$record->entity_id] += $record->tfidf;
+      }
+      else {
+        $sum_of_tfidf_of_wishes[$record->entity_id] = $record->tfidf;
+      }
+    }
+  }
+
+  return $sum_of_tfidf_of_wishes;
+}

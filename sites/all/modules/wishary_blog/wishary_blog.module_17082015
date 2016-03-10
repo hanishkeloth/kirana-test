@@ -1,0 +1,331 @@
+<?php
+
+
+
+function wishary_blog_block_info() {
+
+    $blocks = array();
+    $blocks['wishary_blog_article'] = array(
+        'info' => t('Related Article'),
+    );
+    $blocks['wishary_blog_wishes'] = array(
+        'info' => t('Blog Related Wishes'),
+    );
+
+    return $blocks;
+}
+/**
+ * Implements hook_block_view().
+ */
+function wishary_blog_block_view($delta = '') {
+    $block = array();
+    switch ($delta) {
+        case 'wishary_blog_article':
+            $block['subject'] = '';
+            $block['content'] = _wishary_blog_block_related_content();
+            break;
+        case 'wishary_blog_wishes':
+            $block['subject'] = '';
+            $block['content'] = _wishary_blog_block_relatedw_content();
+            break;
+    }
+    return $block;
+}
+
+
+
+/**
+ * Blog category page related articles.
+ */
+function _wishary_blog_block_related_content() {
+$term = taxonomy_term_load(arg(2));
+$title = $term->name;
+
+  $category = str_replace("'","\\'", $title);;
+  $query = "SELECT
+    ff.entity_id as entity_id,
+    ff.body_value AS body_value,
+    ff.termFrequency AS termFrequency,
+    ff.wordCount AS wordCount,
+    termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf,
+    ff.created
+  FROM (
+    SELECT FD.entity_id,
+      FD.body_value,
+      ROUND((LENGTH(FD.body_value) - LENGTH( REPLACE ( lower(FD.body_value), lower('{$category}'), ''))) / LENGTH('{$category}') ) AS termFrequency,
+      LENGTH(FD.body_value) - LENGTH(REPLACE(FD.body_value, ' ', '')) + 1  AS wordCount, N.created
+    FROM field_data_body FD, node N
+    WHERE FD.bundle = 'pin'
+      AND N.nid = FD.entity_id
+      AND FD.body_value like '%{$category}%'
+  ) ff ORDER BY tfidf DESC, created DESC";
+
+  $result = db_query($query);
+
+  $records = $result->fetchAll(PDO::FETCH_ASSOC);
+
+    $entity_ids = [];
+    foreach ($records as $record) {
+        $entity_ids[] = $record['entity_id'];
+
+    }
+
+
+    $out .= '<div class="pin_page">';
+    $oute = '</div>';
+
+    $result = db_select('node', 'n')->condition('n.type', 'pin', '=')->extend('PagerDefault')->fields('n', array('nid'))->limit(10)->execute()->fetchCol();
+    $per_page = 10;
+    $current_page = pager_default_initialize(count($entity_ids), $per_page);
+    // Split your list into page sized chunks
+    $chunks = array_chunk($entity_ids, $per_page, TRUE);
+
+    $pp = theme('pager', array('quantity', count($entity_ids)));
+
+    // Initialise the pager
+
+    // Split your list into page sized chunks
+    $chunks = array_chunk($entity_ids, $per_page, TRUE);
+    $nodes = node_load_multiple($chunks[$current_page]);
+    $nodes = node_view_multiple($nodes);
+
+
+    if (!$pp or !isset($_GET['page']) or strpos($pp,'page='.$_GET['page']) or strpos($pp, '>'.($_GET['page'] + 1).'<'));
+
+        $out .= render($nodes);
+    $out .= $oute;
+    $out .= $pp;
+    return $out;
+}
+
+/**
+ * The related wishes for a blog and the preference to the blogger's wishes
+ *
+ */
+function _wishary_blog_block_relatedw_content($node) {
+  if (arg(0) == 'node') {
+  $nid = arg(1);
+}
+ $node = node_load($nid);
+ $field_tag_blog = $node->field_tag_blog['und'][0]['entity']->name;
+ $blog_tag_tid = $node->field_blog_tags['und'][0]['tid'];
+ $blog_tags_name = '';
+ if(!empty($blog_tag_tid)){
+  $blog_tags = taxonomy_term_load($blog_tag_tid);
+  $blog_tags_name = $blog_tags->name;
+}
+ $uid = $node->uid;
+//$node = node_load($nid);
+/*$query = "SELECT FD.entity_id, GROUP_CONCAT( CONCAT( TD1.name) SEPARATOR ' ') AS tags, TD1.tid
+FROM field_data_field_tag_blog FD
+  JOIN taxonomy_term_data TD1
+    ON FD.field_tag_blog_tid = TD1.tid
+WHERE FD.entity_id = {$uid}
+GROUP BY (FD.entity_id) ";
+
+  //echo $query;
+
+  $result = db_query($query);
+
+  $record_new = $result->fetchAll(PDO::FETCH_ASSOC);*/
+
+  //$tags_text = $record_new[0]['tags'];
+  $tags_text = $field_tag_blog.' '.$blog_tags_name;
+  $tags = explode(' ', str_replace(['#', '_'], ['', ' '], trim($tags_text)));
+
+  // echo '<pre>';
+  // print_r($tags);
+
+  foreach ($tags as $tag) {
+    $term_frequencies[] = "ROUND((LENGTH(FD.body_value) - LENGTH( REPLACE ( lower(FD.body_value), lower('{$tag}'), ''))) / LENGTH('{$tag}') )";
+    $term_frequencie_where[] = "FD.body_value LIKE '%{$tag}%'";
+  }
+
+  /*$term_frequencies_str = implode('+', $term_frequencies);
+  $term_frequencie_where_str = implode(' AND ', $term_frequencie_where);
+
+  $query = "SELECT
+  ff.entity_id as entity_id,
+  ff.body_value AS body_value,
+  ff.termFrequency AS termFrequency,
+  ff.wordCount AS wordCount,
+  termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf,
+  ff.created, ff.uid
+  FROM (
+    SELECT
+      FD.entity_id AS entity_id,
+      FD.body_value AS body_value,
+      ({$term_frequencies_str}) AS termFrequency,
+      LENGTH(FD.body_value) - LENGTH(REPLACE(FD.body_value, ' ', '')) + 1 AS wordCount,
+      n.created, n.uid
+    FROM field_data_body FD,
+      node n
+    WHERE
+      FD.bundle IN ('pin')
+      AND n.nid = FD.entity_id
+      AND ({$term_frequencie_where_str})
+  ) ff  ORDER BY tfidf DESC, created DESC";*/
+
+
+  $term_frequencies_str = implode('+', $term_frequencies);
+  $term_frequencie_where_str = implode(' OR ', $term_frequencie_where);
+
+  $query = "SELECT
+  ff.entity_id as entity_id,
+  ff.body_value AS body_value,
+  ff.termFrequency AS termFrequency,
+  ff.wordCount AS wordCount,
+  termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf,
+  ff.created, ff.uid
+  FROM (
+    SELECT
+      FD.entity_id AS entity_id,
+      FD.body_value AS body_value,
+      ({$term_frequencies_str}) AS termFrequency,
+      LENGTH(FD.body_value) - LENGTH(REPLACE(FD.body_value, ' ', '')) + 1 AS wordCount,
+      n.created, n.uid
+    FROM field_data_body FD,
+      node n
+    WHERE
+      FD.bundle IN ('pin')
+      AND n.nid = FD.entity_id
+      AND n.uid=5497
+      AND ({$term_frequencie_where_str})
+  ) ff  ORDER BY tfidf DESC, created DESC";
+  //echo $query;
+
+  $result = db_query($query);
+
+  $records = $result->fetchAll(PDO::FETCH_ASSOC);
+
+ // echo '<pre>';
+ // print_r($records);
+
+  $author_wishes = [];
+  $other_wishes =[];
+
+
+  foreach ($records as $record) {
+
+    if ($record['uid'] == $uid) {
+      $author_wishes[] = $record['entity_id'];
+    }
+    else {
+      $other_wishes[] = $record['entity_id'];
+    }
+  }
+
+  $nodeids = array_merge($author_wishes, $other_wishes);
+   $out .= '<div class="pin_page">';
+    $oute = '</div>';
+
+    $result = db_select('node', 'n')->condition('n.type', 'pin', '=')->extend('PagerDefault')->fields('n', array('nid'))->limit(10)->execute()->fetchCol();
+    $per_page = 10;
+    $current_page = pager_default_initialize(count($nodeids), $per_page);
+    // Split your list into page sized chunks
+    $chunks = array_chunk($nodeids, $per_page, TRUE);
+
+    $pp = theme('pager', array('quantity', count($nodeids)));
+
+    // Initialise the pager
+
+    // Split your list into page sized chunks
+    $chunks = array_chunk($nodeids, $per_page, TRUE);
+    $nodes = node_load_multiple($chunks[$current_page]);
+    $nodes = node_view_multiple($nodes);
+
+
+    if (!$pp or !isset($_GET['page']) or strpos($pp,'page='.$_GET['page']) or strpos($pp, '>'.($_GET['page'] + 1).'<'));
+
+        $out .= render($nodes);
+    $out .= $oute;
+    $out .= $pp;
+    return $out;
+}
+
+function wishary_blog_services_resources() {
+  $resources = array(
+    'blog_related_wishes' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Retrieve all the blog related wishes',
+          'callback' => '_blog_relevant_wishes',
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to node'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'nid',
+              'type' => 'int',
+              'description' => 'Node Id',
+              'source' => array('param' => 'nid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return $resources;
+}
+
+function _blog_relevant_wishes($nid) {
+  $node = node_load($nid);
+  $field_tag_blog = $node->field_tag_blog['und'][0]['entity']->name;
+  $blog_tag_tid = $node->field_blog_tags['und'][0]['tid'];
+  $blog_tags_name = '';
+  if(!empty($blog_tag_tid)){
+    $blog_tags = taxonomy_term_load($blog_tag_tid);
+    $blog_tags_name = $blog_tags->name;
+  }
+
+  $tags_text = $field_tag_blog.' '.$blog_tags_name;
+  $tags = explode(' ', str_replace(['#', '_'], ['', ' '], trim($tags_text)));
+
+  // echo '<pre>';
+  // print_r($tags);
+
+  foreach ($tags as $tag) {
+    $term_frequencies[] = "ROUND((LENGTH(FD.body_value) - LENGTH( REPLACE ( lower(FD.body_value), lower('{$tag}'), ''))) / LENGTH('{$tag}') )";
+    $term_frequencie_where[] = "FD.body_value LIKE '%{$tag}%'";
+  }
+
+   $term_frequencies_str = implode('+', $term_frequencies);
+  $term_frequencie_where_str = implode(' OR ', $term_frequencie_where);
+
+  $query = "SELECT
+  ff.entity_id as entity_id,
+  ff.body_value AS body_value,
+  ff.termFrequency AS termFrequency,
+  ff.wordCount AS wordCount,
+  termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf,
+  ff.created, ff.uid
+  FROM (
+    SELECT
+      FD.entity_id AS entity_id,
+      FD.body_value AS body_value,
+      ({$term_frequencies_str}) AS termFrequency,
+      LENGTH(FD.body_value) - LENGTH(REPLACE(FD.body_value, ' ', '')) + 1 AS wordCount,
+      n.created, n.uid
+    FROM field_data_body FD,
+      node n
+    WHERE
+      FD.bundle IN ('pin')
+      AND n.nid = FD.entity_id
+      AND n.uid=5497
+      AND ({$term_frequencie_where_str})
+  ) ff  ORDER BY tfidf DESC, created DESC";
+  //echo $query;
+
+  $result = db_query($query);
+
+  $records = $result->fetchAll(PDO::FETCH_ASSOC);
+  $wishes = [];
+  foreach ($records as $record) {
+    $wishes[]['entity_id'] = $record['entity_id'];
+  }
+
+  drupal_json_output($wishes);
+  drupal_exit();
+}

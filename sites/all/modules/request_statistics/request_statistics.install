@@ -1,0 +1,154 @@
+<?php
+/**
+ * @file
+ * Request statistics for visitor and page.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function request_statistics_schema() {
+  require_once 'request_statistics.php';
+  $rs = new RequestStatistics();
+  $schema[$rs->visitorTableName()] = array(
+    'description' => $rs->visitorDescription(),
+    'fields' => array(
+      $rs->visitorPrimaryKey() => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary Key.',
+      ),
+      'user_id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => '{user}.uid',
+      ),
+    ),
+    'indexes' => array('user_id' => array('user_id')),
+    'primary key' => array($rs->visitorPrimaryKey()),
+  );
+  $schema[$rs->requestTableName()] = array(
+    'description' => $rs->requestDescription(),
+    'fields' => array(
+      'year' => array(
+        'type' => 'int',
+        'size' => 'small',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Year.',
+      ),
+      'month' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Month.',
+      ),
+      'day' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Day.',
+      ),
+      'hour' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Hour.',
+      ),
+      'request_id' => array(
+        'type' => 'varchar',
+        'length' => 30,
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique request ID.',
+      ),
+      'visitor_id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => '{request_statistics_visitor}.visitor_id.',
+      ),
+      'referrer_uri' => array(
+        'type' => 'varchar',
+        'length' => 200,
+        'default' => '',
+        'not null' => TRUE,
+        'description' => 'Referrer URI.',
+      ),
+      'user_agent' => array(
+        'type' => 'varchar',
+        'length' => 300,
+        'default' => '',
+        'not null' => TRUE,
+        'description' => 'User agent.',
+      ),
+      'request_scheme' => array(
+        'type' => 'varchar',
+        'length' => 10,
+        'default' => '',
+        'not null' => TRUE,
+        'description' => 'Request scheme.',
+      ),
+      'request_path' => array(
+        'type' => 'varchar',
+        'length' => 200,
+        'default' => '',
+        'not null' => TRUE,
+        'description' => 'Request path.',
+      ),
+      'request_query' => array(
+        'type' => 'varchar',
+        'length' => 200,
+        'default' => '',
+        'not null' => TRUE,
+        'description' => 'Request query.',
+      ),
+      'request_fragment' => array(
+        'type' => 'varchar',
+        'length' => 100,
+        'default' => '',
+        'not null' => TRUE,
+        'description' => 'Request fragment.',
+      ),
+      'inner_height' => array(
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+        'description' => 'Web browser window inner height.',
+      ),
+      'inner_width' => array(
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+        'description' => 'Web browser window inner width.',
+      ),
+      'outer_height' => array(
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+        'description' => 'Web browser window outer height.',
+      ),
+      'outer_width' => array(
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+        'description' => 'Web browser window outer width.',
+      ),
+      'screen_height' => array(
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+        'description' => 'Screen height.',
+      ),
+      'screen_width' => array(
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+        'description' => 'Screen width.',
+      ),
+    ),
+    'indexes' => array('visitor_id' => array('visitor_id')),
+    'primary key' => $rs->requestPrimaryKeys(),
+  );
+  return $schema;
+}

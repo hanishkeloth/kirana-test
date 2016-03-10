@@ -1,0 +1,21 @@
+; @author: Daniel Honrade http://drupal.org/user/351112
+
+name = Block Lazyloader
+package = Lazyloader
+description = "Automatically lazyload blocks on windows scroll, makes sites with multiple blocks load faster."
+core = "7.x"
+dependencies[] = block
+
+files[] = blocklazyloader.install
+files[] = blocklazyloader.module
+files[] = blocklazyloader.admin.inc
+scripts[] = jquery.blocklazyloader.js
+stylesheets[all][] = blocklazyloader.css
+configure = admin/structure/block/blocklazyloader
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "blocklazyloader"
+datestamp = "1380556246"
+

@@ -1,0 +1,68 @@
+<?php
+/**
+ * @file
+ * Tests for different parts of deeplink module.
+ */
+
+/**
+ * Test object cache storage.
+ */
+class Deeplink extends DrupalWebTestCase {
+  protected $sampleText1 = 'Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.';
+  protected $sampleText2 = 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?';
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Deeplink module testing.',
+      'description' => 'Verify that Deeplink can be generated properly and it can be accessible.',
+      'group' => 'Deeplink',
+    );
+  }
+
+  public function setUp() {
+    // Additionally enable ctools module.
+    parent::setUp('controls', 'deeplink');
+  }
+
+  /* test for Deeplink form appearing on node*/
+  public function testDeeplinkNotify() {
+    $users = array();
+
+    // create user for each deeplink type
+    foreach (controls_get('deeplinkers') as $name => $deeplinker) {
+      $keyname = t(DEEPLINK_PERM_TEXT, array('!dlink' => $deeplinker['title']));
+      $users[] = $this->drupalCreateUser(array($keyname));
+    }
+
+    $deeplinks = array();
+    foreach ($users as $user) {
+      $this->drupalLogin($user);
+
+      // enable here Deeplink for content type: 'page'
+      $deeplink_settings = array('page' => 'page');
+      variable_set('deeplink_content_types', $deeplink_settings);
+
+      // Add a node.
+      $node1 = $this->drupalCreateNode(array('type' => 'page', 'promote' => 0));
+      $this->assertTrue(node_load($node1->nid), t('Page node created.'));
+      $this->verbose('Node created: ' . var_export($node, TRUE));
+      $this->drupalGet("node/{$node1->nid}");
+      // Check if deeplink section is present on enabled content type ($this->assertText())
+      // TODO: Send the e-mail using Simpletest
+      // TODO: Check if the e-mail is received
+      // TODO: Check if the deeplink link is present (check [deeplink-url-absolute], [deeplink-expires-medium])
+      // TODO: Save the deeplink link for later ($deeplinks[] = $link)
+      // LOGOUT
+      $this->drupalLogout($user_fmaat);
+    }
+  }
+  // Test all deeplinks as anonymous
+  // TODO: First give the permission to anonymous to 
+  foreach ($deeplinks as $deeplink) {
+    // TODO: verify that all deeplinks are working fine
+    // $this->assertResponse(200, t('example'));
+    // $this->assertText(t('Example'), t('The page is accessible using deeplink'));
+  }
+
+}
+

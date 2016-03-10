@@ -1,0 +1,43 @@
+<?php
+
+
+/**
+ * Implements hook_menu()
+ * @return array
+ */
+function my_module_menu() {
+ 
+  $aItems = array(
+      'hello_world' => array(
+        'title' => 'Hello world',
+        'page callback' => '_page_new_world',
+        'access callback' => TRUE,
+      ),
+    );
+  return $aItems;
+}
+ 
+/**
+ * Page callback mapped to the url /hello_world
+ *
+ * @return array
+ */
+function _page_new_world() {
+$hello = t('女士 夹克');
+db_insert('d7_example_table')
+  ->fields(array('name' => $hello,))
+  ->execute();
+  
+  $city=2;
+  $query = db_select('d7_example_table', 'z')
+  ->fields('z', array('name'))
+  ->condition('z.pid', $city)
+  ->range(0, 1)
+  ->execute();
+  $result = $query->fetchObject();
+ print $result->name;
+
+  return array(
+    '#markup' => '<p>Hello world</p>'
+  );
+}

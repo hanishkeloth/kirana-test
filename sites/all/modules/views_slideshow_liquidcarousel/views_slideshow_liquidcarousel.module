@@ -1,0 +1,61 @@
+<?php
+/**
+ * @file views_slideshow_liquidcarousel.module
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function views_slideshow_liquidcarousel_theme($existing, $type, $theme, $path) {
+  return array(
+    'views_slideshow_liquidcarousel_main_frame' => array(
+      'variables' => array('view' => NULL, 'settings' => array(), 'rows' => array(), 'title' => ''),
+      'template' => 'theme/views-slideshow-liquidcarousel-main-frame',
+      'file' => 'theme/views_slideshow_liquidcarousel.theme.inc',
+    ),
+  );
+}
+
+/**
+ * Gets the path to the Liquid Carousel library.
+ *
+ * @return
+ *   The path to the Liquid Carousel library js file, or FALSE if not found.
+ */
+function _views_slideshow_liquidcarousel_library_path() {
+  $library_path = libraries_get_path('liquidcarousel');
+
+  if (!empty($library_path)) {
+    // Attempt to use minified version of Liquid Carousel plugin.
+    if (file_exists($liquidcarousel_path = $library_path . '/js/jquery.liquidcarousel.min.js')) {
+      return $liquidcarousel_path;
+    }
+    // Otherwise use non-minified version if available.
+    elseif (file_exists($liquidcarousel_path = $library_path . '/js/jquery.liquidcarousel.js')) {
+      return $liquidcarousel_path;
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Get the install error message.
+ */
+function _views_slideshow_liquidcarousel_get_install_error_message() {
+  $library_path = libraries_get_path('liquidcarousel');
+  $library_url = 'http://www.nikolakis.net/liquidcarousel/';
+  $library_link = l($library_url, $library_url,
+    array('attributes' => array('target' => '_blank')));
+
+  $t = get_t();
+  $output = $t('The jQuery Liquid Carousel plugin needs to be installed.');
+  $output .= ' ';
+  $output .= $t('Download the jQuery plugin from !link and unzip it into @library_path.',
+    array(
+      '!link' => $library_link,
+      '@library_path' => $library_path,
+    )
+  );
+  return $output;
+}

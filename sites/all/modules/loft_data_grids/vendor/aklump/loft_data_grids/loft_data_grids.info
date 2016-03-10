@@ -1,0 +1,12 @@
+name = "Loft Data Grids"
+description = "PHP Classes to allow data placement in a grid structure and exporting in various data formats."
+version = 0.4.13
+author = Aaron Klump <sourcecode@intheloftstudios.com>
+homepage = http://www.intheloftstudios.com/packages/php/loft_data_grids
+
+; Information added by Drupal.org packaging script on 2014-12-02
+version = "7.x-2.1-rc5"
+core = "7.x"
+project = "loft_data_grids"
+datestamp = "1417535587"
+

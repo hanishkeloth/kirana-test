@@ -1,0 +1,47 @@
+<?php
+/**
+ * @file
+ * Tests for the Account Mail module.
+ */
+
+
+/**
+ * Test that submitting a form with an 'account mail' field will update the
+ * user's email address.
+ */
+class AccountMailTestCase extends DrupalWebTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Account mail',
+      'description' => "Test that users' email addresses are updated when using an account_mail FAPI field.",
+      'group' => 'Form API',
+    );
+  }
+
+  function setUp() {
+    parent::setUp('account_mail', 'account_mail_test');
+  }
+
+  /**
+   * Test that an account_mail field *without* a #uid property will update the
+   * current user's email address.
+   */
+  function testUpdateCurrentUserEmail() {
+    // The URL account_mail_test__current_user requires a logged-in user.
+    $account = $this->drupalCreateUser(array('access content'));
+    $this->drupalLogin($account);
+
+    // Visit the page and enter a new email address.
+    $new_email = 'foo@foo.example.com';
+    $this->drupalGet('account_mail_test__current_user');
+    $edit = array(
+      'arbitrary_string' => $new_email,
+    );
+    $this->drupalPost(NULL, $edit, t('Save'));
+
+    // Check the database - the user's email address should have been updated.
+    $current_email = db_query('SELECT mail FROM {users} WHERE uid = :uid', array(':uid' => $account->uid))->fetchField();
+
+    $this->assertEqual($new_email, $current_email, t('The email address was set to %current_email and %expected_email was expected.', array('%current_email' => $current_email, '%expected_email' => $new_email)));
+  }
+}

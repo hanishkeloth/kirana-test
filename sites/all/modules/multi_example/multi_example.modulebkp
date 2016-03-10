@@ -1,0 +1,925 @@
+<?php
+
+/**
+ * @file
+ * Example module for ctools miltistep form wizard.
+ *
+ * Example module which demonstrates the power of ctools multistep wizard.
+ */
+
+
+function get_user_node_by_type($node_type, $uid){
+  $nodes = array();
+  $nids = db_query('SELECT nid FROM {node} WHERE uid = :uid AND type = :type', array(':uid' => $uid, ':type' => $node_type))->fetchCol();
+  return $nids;
+  /*if (!empty($nids)) {
+    $nodes = node_load_multiple($nids);    
+  }
+  return $nodes;*/
+}
+
+/**
+ * Implements hook_menu().
+ */
+function multi_example_menu() {
+  $items['example/%ctools_js/form'] = array(
+    'title' => 'Login Tour',
+    'page callback' => 'multi_example_forms',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items['login_tour_steps/%ctools_js/form'] = array(
+    'title' => 'Login Tour',
+    'page callback' => 'multi_example_form',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  //login_tour_steps
+  $items['login_tour_steps'] = array(
+    'title' => 'Login Tour',
+    'page callback' => 'multi_example_links',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  
+  $items['example-link'] = array(
+    'title' => 'Example form link',
+    'page callback' => 'pinboard_helper_repins',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+function person(){
+	$flag_personalised_collect = flag_get_user_flags('node');
+	if(count($flag_personalised_collect['personalised'])<3){
+		drupal_set_message('Error','error');
+
+	}
+        $bid = user_pinboard();
+    foreach($flag_personalised_collect['personalised'] as $key =>$value) {
+		$collect_nids[] = $key;
+		$node = node_load($key);
+		$following_uids[] = $node->uid;
+		$followerr[] =services_addfollowers_retrieve($node->uid);
+	
+	//	$repin_node[] =pinboard_helper_repins($key,$bid);
+		$repin_node[] =pinboard_helper_clone($key,$bid);
+		}
+	
+}
+function pinboard_helper_clone($nid,$bid) {
+//  echo 1;echo $bid; echo 2; echo $nid;exit;
+  global $user;
+  if (!$user->uid) {
+    drupal_set_message(pinboard_helper_const('PINBOARD_REPLACE_TITLE_LOGIN_REPIN'));
+    drupal_goto('user');
+  } else {
+    require_once(drupal_get_path('module', 'node').'/node.pages.inc');
+    //return drupal_get_form('pinboard_helper_repin_form');
+	$node = node_load($nid);
+    //$rnode = wishary_pin_clone_node_prepare($node);
+	$rnode = clone $node;
+	$rnode->nid = $node->nid;
+	$rnode->uid = $node->uid;
+    $repin = db_select('pinboard_repins')->fields('pinboard_repins', array('did'))->condition('nid', $rnode->nid, '=')->condition('uid', $rnode->uid, '=')->execute()->fetchCol();
+    //drupal_set_message('<pre>'. check_plain(print_r($repin, 1)) .'</pre>');
+    if (count($repin)) {
+      $rnode->did = $repin[0];
+    } else {
+      $rnode->did = $rnode->nid;
+    }
+    $rnode->gid = $rnode->nid;
+
+ /*   unset($rnode->created);
+    unset($rnode->changed);
+    unset($rnode->rdf_mapping);
+    unset($rnode->vid);
+    unset($rnode->log);
+    unset($rnode->status);
+   // unset($rnode->comment);
+    unset($rnode->promote);
+    unset($rnode->sticky);*/
+    unset($rnode->nid);
+    unset($rnode->uid);
+    unset($rnode->name);
+  /*  unset($rnode->tnid);
+    unset($rnode->translate);
+    unset($rnode->revision_timestamp);
+    unset($rnode->revision_uid);
+    unset($rnode->cid);
+    unset($rnode->last_comment_timestamp);
+    unset($rnode->last_comment_name);
+    unset($rnode->last_comment_uid);
+    unset($rnode->comment_count);
+    unset($rnode->picture);
+    unset($rnode->data);*/
+
+    $rnode->uid = $user->uid;
+    $rnode->name = $user->name;
+  //  $rnode->is_new = True;
+    $rnode->bid = $bid;
+
+    node_save($rnode);
+	//$ruid = $rnode->uid;echo $ruid; $exit;
+	db_delete('pinboard_repins')->condition('nid', $node->nid)->condition('uid', $node->uid)->execute();
+  $query = db_insert('pinboard_repins')->fields(array('uid', 'nid', 'did', 'bid', 'data'));
+  $query->values(array(
+    'uid' => $rnode->uid,
+    'nid' => $rnode->nid,
+    'did' => $rnode->gid,
+    'bid' => $bid,
+    'data' => '',
+  ));
+  $query->execute();
+//  print_r($rnode);exit;
+  
+  
+
+    //drupal_set_message('<pre>'. check_plain(print_r(arg(1), 1)) .'</pre>');
+  //  return drupal_get_form($rnode->type . '_node_form', $rnode);
+//    return drupal_get_form('pinboard_helper_repin_form');
+  }
+  return $rnode;
+
+}
+	
+  
+function pinboard_helper_repins($nid,$bid) {
+//  echo 1;echo $bid; echo 2; echo $nid;exit;
+  global $user;
+  if (!$user->uid) {
+    drupal_set_message(pinboard_helper_const('PINBOARD_REPLACE_TITLE_LOGIN_REPIN'));
+    drupal_goto('user');
+  } else {
+    require_once(drupal_get_path('module', 'node').'/node.pages.inc');
+    //return drupal_get_form('pinboard_helper_repin_form');
+	$node = node_load($nid);
+    $rnode = node_load($nid);
+    $repin = db_select('pinboard_repins')->fields('pinboard_repins', array('did'))->condition('nid', $rnode->nid, '=')->condition('uid', $rnode->uid, '=')->execute()->fetchCol();
+    //drupal_set_message('<pre>'. check_plain(print_r($repin, 1)) .'</pre>');
+    if (count($repin)) {
+      $rnode->did = $repin[0];
+    } else {
+      $rnode->did = $rnode->nid;
+    }
+    $rnode->gid = $rnode->nid;
+
+    unset($rnode->created);
+    unset($rnode->changed);
+    unset($rnode->rdf_mapping);
+    unset($rnode->vid);
+    unset($rnode->log);
+    unset($rnode->status);
+   // unset($rnode->comment);
+    unset($rnode->promote);
+    unset($rnode->sticky);
+    unset($rnode->nid);
+    unset($rnode->uid);
+    unset($rnode->name);
+    unset($rnode->tnid);
+    unset($rnode->translate);
+    unset($rnode->revision_timestamp);
+    unset($rnode->revision_uid);
+    unset($rnode->cid);
+    unset($rnode->last_comment_timestamp);
+    unset($rnode->last_comment_name);
+    unset($rnode->last_comment_uid);
+    unset($rnode->comment_count);
+    unset($rnode->picture);
+    unset($rnode->data);
+
+    $rnode->uid = $user->uid;
+    $rnode->name = $user->name;
+    $rnode->is_new = True;
+    $rnode->bid = $bid;
+
+    node_save($rnode);
+	//$ruid = $rnode->uid;echo $ruid; $exit;
+	db_delete('pinboard_repins')->condition('nid', $node->nid)->condition('uid', $node->uid)->execute();
+  $query = db_insert('pinboard_repins')->fields(array('uid', 'nid', 'did', 'bid', 'data'));
+  $query->values(array(
+    'uid' => $rnode->uid,
+    'nid' => $rnode->nid,
+    'did' => $rnode->gid,
+    'bid' => $bid,
+    'data' => '',
+  ));
+  $query->execute();
+//  print_r($rnode);exit;
+  
+  
+
+    //drupal_set_message('<pre>'. check_plain(print_r(arg(1), 1)) .'</pre>');
+  //  return drupal_get_form($rnode->type . '_node_form', $rnode);
+//    return drupal_get_form('pinboard_helper_repin_form');
+  }
+  return $rnode;
+
+}
+
+function user_pinboard(){
+	$data = serialize(array('category' => '', 'description' => ''));
+	global $user;
+	$value = 'My Style';
+      $query = db_insert('pinboard_boards')->fields(array('uid', 'name', 'data'));
+      $query->values(array('uid' => $user->uid, 'name' => t($value), 'data' => $data));
+      $query->execute();
+      $bid = db_select('pinboard_boards')->fields('pinboard_boards', array('bid'))->condition('name', t($value), '=')->condition('uid', $user->uid, '=')->execute()->fetchCol();
+      $bp = new stdClass;
+      $bp->bid = $bid[0];
+      $bp->uid = $user->uid;
+      $bp->name = $value;
+      $bp->username = $user->name;
+      pinboard_helper_pathauto_update_alias($bp, 'insert');
+      drupal_set_message(pinboard_helper_const('PINBOARD_REPLACE_TITLE_CREATE_BOARD_NAME', array('!board' =>t($value), '!link' => url(PINBOARD_REPLACE_PATH_BOARD.'/edit/'.$bid[0]))));
+	  return $bid[0];
+}
+
+
+/**
+ * Page callback: Dispalys example links.
+ *
+ * @return array
+ *   A render array for displaying few links.
+ *
+ * @see multi_example_menu()
+ */
+function multi_example_link() {
+
+  // Include the CTools tools that we need.
+  ctools_include('ajax');
+  ctools_include('modal');
+
+  // Add CTools' javascript to the page.
+  ctools_modal_add_js();
+  //$links[] = l(t('Multistep example nojs'), 'example/nojs/form');
+ // $links[] = l(t('Multistep example nojs'), 'example/nojs/form');
+ // $links[] = ctools_modal_text_button(t('Multistep Login'), 'example/nojs/form', t('Start'));
+ // $links[] = '<div id="ctools-sample">' . t('Here will come result in modal case') . '</div>';
+  return  array('#theme' => 'item_list', '#items' => $links);
+}
+
+/**
+ * Page callback: Handles multistep precessing.
+ *
+ * @return string
+ *   Multistep wizard output.
+ *
+ * @see multi_example_menu()
+ */
+function multi_example_form($js = NULL, $step = NULL) {
+  if ($js) {
+    ctools_include('modal');
+    ctools_include('ajax');
+  }
+
+  // Define array for ctools multistep wizard.
+  $form_info = array(
+    'id' => 'multi_example',
+  //  'path' => "example/" . ($js ? 'ajax' : 'nojs') . "/form/%step",
+	'path' => "login_tour_steps/" . ($js ? 'ajax' : 'nojs') . "/form/%step",
+    'show trail' => TRUE,
+    'show back' => TRUE,
+    'show cancel' => FALSE,
+    'show return' => FALSE,
+    'next callback' =>  'multi_example_wizard_next',
+    'finish callback' => 'multi_example_wizard_finish',
+    'cancel callback' => 'multi_example_wizard_cancel',
+
+   // Define forms order.
+    'order' => array(
+      'start' => t('Enter your Gender'),
+      'second' => t('Favourite Category'),
+      'third' => t('Favourite Feeds'),
+    //  'fourth' => t('Do you like cookies?'),
+    ),
+
+   // Define forms
+    'forms' => array(
+      'start' => array(
+        'form id' => 'multi_example_start_form'
+      ),
+      'second' => array(
+        'form id' => 'multi_example_form_second'
+      ),
+      'third' => array(
+        'form id' => 'multi_example_form_third'
+      ),
+    /*  'fourth' => array(
+        'form id' => 'multi_example_form_fourth'
+      ),*/
+    ),
+/*	 $form_info['buttons']['next'] = array
+	(
+		//'#type' => 'submit',
+		'#value' => t('Next'),
+	
+	),*/
+ 
+  );
+  // We're not using any real storage here, so we're going to set our
+  // object_id to 1. When using wizard forms, id management turns
+  // out to be one of the hardest parts. Editing an object with an id
+  // is easy, but new objects don't usually have ids until somewhere
+  // in creation.
+  //
+  // We skip all this here by just using an id of 1.
+  $object_id = 1;
+
+  if (empty($step)) {
+
+    // We reset the form when $step is NULL because that means they have
+    // for whatever reason started over.
+    multi_example_cache_clear($object_id);
+    $step = 'start';
+  }
+
+  // This automatically gets defaults if there wasn't anything saved.
+  $object = multi_example_cache_get($object_id);
+
+  // live $form_state changes.
+  $form_state = array(
+    'ajax' => $js,
+
+    // Put our object and ID into the form state cache so we can easily find it.
+    'object_id' => $object_id,
+    'object' => &$object,
+  );
+
+  // Send this all off to our form. This is like drupal_get_form only wizardy.
+  ctools_include('wizard');
+  $form = ctools_wizard_multistep_form($form_info, $step, $form_state);
+ // print_r($form);exit;
+  $output = drupal_render($form);
+  
+ /* if ($js) {
+
+    // If javascript is active, we have to use a render array.
+    $commands = array();
+    if ($output === FALSE || !empty($form_state['complete'])) {
+      // Dismiss the modal.
+      //$commands[] = ajax_command_html('#ctools-sample', render(multi_example_get_result($object)));
+      $commands[] = ctools_ajax_command_reload();
+      $commands[] = ctools_modal_command_dismiss();
+    }
+    elseif (!empty($form_state['cancel'])) {
+
+      // If cancelling, return to the activity.
+      $commands[] = ctools_modal_command_dismiss();
+    }
+    else {
+      $commands = ctools_modal_form_render($form_state, $output);
+    }
+    print ajax_render($commands);
+  }
+  else {
+    if ($output === FALSE || !empty($form_state['complete'])) {
+
+      return render(multi_example_get_result($object)) . "\n\r" . l(t('Back'), 'user');
+    }
+    elseif (!empty($form_state['cancel'])) {
+      drupal_goto('example-link');
+    }
+    else {
+      return $output;
+    }
+  }*/
+  return $output;
+}
+
+/**
+ * Clears the wizard cache.
+ *
+ * @param integer $id
+ *   cache id.
+ */
+function multi_example_cache_clear($id) {
+  ctools_include('object-cache');
+  ctools_object_cache_clear('multi_example', $id);
+}
+
+/**
+ * Stores our little cache so that we can retain data from form to form.
+ *
+ * @param integer $id
+ *   cache id.
+ * @param object $object
+ *   object with form values.
+ */
+function multi_example_cache_set($id, $object) {
+  ctools_include('object-cache');
+  ctools_object_cache_set('multi_example', $id, $object);
+}
+
+/**
+ * Gets the current object from the cache, or default.
+ *
+ * @param integer $id
+ *   cache id.
+ *
+ * @return object
+ *   cache with stored stuff.
+ */
+function multi_example_cache_get($id) {
+  ctools_include('object-cache');
+  $object = ctools_object_cache_get('multi_example', $id);
+  if (!$object) {
+    // Create a default object.
+    $object = new stdClass;
+  }
+
+  return $object;
+}
+
+/**
+ * Handles the 'next' click on the add/edit pane form wizard.
+ *
+ * All we need to do is store the updated pane in the cache.
+ */
+function multi_example_wizard_next(&$form_state) {
+  multi_example_cache_set($form_state['object_id'], $form_state['object']);
+}
+
+/**
+ * Handles the 'finish' click on teh add/edit pane form wizard.
+ *
+ * All we need to do is set a flag so the return can handle adding
+ * the pane.
+ */
+function multi_example_wizard_finish(&$form_state) {
+  $form_state['complete'] = TRUE;
+}
+
+/**
+ * Handles the 'cancel' click on the add/edit pane form wizard.
+ */
+function multi_example_wizard_cancel(&$form_state) {
+  $form_state['cancel'] = TRUE;
+}
+
+/**
+ * Generates first form.
+ *
+ * @ingroup forms
+ */
+function multi_example_start_form($form, &$form_state) {
+	$male['path'] = 'sites/all/themes/xingyuyuan/images/male.png';
+
+	$male['attributes'] = array(
+'class' => 'class_male',
+);
+
+	
+	$female['path'] = 'sites/all/themes/xingyuyuan/images/female.png';
+	
+	$female['attributes'] = array(
+'class' => 'class_female',
+);
+
+	$images = array(
+	'Male' =>  theme('image',$male),
+
+	'Female' =>  theme('image',$female), 
+
+	);
+	
+	$form['#attributes']['class'][] = 'gender_form_class';
+	$form['gender'] = array(
+	'#type' => 'radios',
+	'#title' => t('Select your Gender'),
+	//'#options' => array('M'=>t('Male'),'F'=>t('Female')),
+	'#default_value' => isset($form_state['object']->gender) ? $form_state['object']->gender : '',
+	'#options' => $images,
+	//'#required' => TRUE,
+	     
+	);
+ 	return $form;
+}
+
+/**
+ * Handles submit of first form.
+ */
+function multi_example_start_form_submit($form, &$form_state) {
+  $form_state['object']->gender = $form_state['values']['gender'];
+  $gender = $form_state['values']['gender'];
+	$db_name1 = 'profile';
+	global $user;
+	$data1 = array(
+     'type' => 'gender',
+     'uid' => $user->uid,
+     'label' => 'Gender',
+     'created' => REQUEST_TIME,
+     'changed' => REQUEST_TIME,
+   	);     
+ 
+	$saved_new1 = drupal_write_record($db_name1, $data1);
+	if($saved_new1) {
+		$get_entity_id =db_query("SELECT max(pid) as pid  from {profile}")->fetchField();
+		$db_name2 = 'field_data_field_ggender';
+		$data2 = array(
+		'entity_type' => 'profile2',
+		'bundle' => 'gender',
+		'deleted' => 0,
+		'entity_id' => $get_entity_id,
+		'revision_id' => $get_entity_id,
+		'language' => 'und',
+		'delta' => 0,
+		'field_ggender_value' =>$gender,
+		);     
+ 
+	$saved_new2 = drupal_write_record($db_name2, $data2);
+    }
+	if($saved_new2) {
+		$db_name3 = 'field_revision_field_ggender';
+		$data3 = array(
+		'entity_type' => 'profile2',
+		'bundle' => 'gender',
+		'deleted' => 0,
+		'entity_id' => $get_entity_id,
+		'revision_id' => $get_entity_id,
+		'language' => 'und',
+		'delta' => 0,
+		'field_ggender_value' =>$gender,
+		);     
+	$saved_new3 = drupal_write_record($db_name3, $data3);
+    }
+	
+}
+
+/**
+ * Handles validate of first form.
+ */
+function multi_example_start_form_validate($form, &$form_state) {
+	if(empty($form_state['values']['gender'])){
+		form_set_error('gender','Please select gender');
+	}
+}
+
+/**
+ * Generates second form.
+ *
+ * @ingroup forms
+ */
+ 
+function multi_example_form_second($form, &$form_state) {
+   $form['#attributes']['class'][] = 'gender_form_class';
+   $form['my_views_category'] = array(
+    '#type' => 'markup',
+    '#markup' =>views_embed_view('categories_display','page'),
+	'#default_value' => isset($form_state['object']->my_views_category) ? $form_state['object']->my_views_category : array(),
+    '#weight' => 1,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Next',
+  );
+ 
+
+
+  return $form;
+}
+
+/**
+ * Handles submit for second form.
+ */
+
+function multi_example_form_second_submit($form, &$form_state) {
+  $form_state['object']->my_views_category = $form_state['values']['my_views_category'];
+   drupal_goto('login_tour_steps/nojs/form/third');
+}
+/**
+ * Handles validate for second form.
+ */
+ 
+function multi_example_form_second_validate(&$form, &$form_state) {
+	
+	$flag_category_bookmarks = flag_get_user_flags('taxonomy_term');//personalised category
+	$flag_ecommerce_bookmarks = flag_get_user_flags('taxonomy_term');//ecommerce_bookmarks
+	if(count($flag_category_bookmarks['category_bookmarks'])< 1 && count($flag_ecommerce_bookmarks['ecommerce_bookmarks'])< 1)
+	{
+		form_set_error('my_views_category','Please select at least 1 category and ecommerce site');
+	}
+	 
+	if(count($flag_category_bookmarks['category_bookmarks'])< 1)
+	{
+		form_set_error('my_views_category','Please select at least 1 category');
+	}
+	
+	
+	
+	if(count($flag_ecommerce_bookmarks['ecommerce_bookmarks'])< 1) {
+		form_set_error('my_views_category','Please select at least 1 ecommerce site');
+	}
+}
+
+
+/**
+ * Generates third form.
+ *
+ * @ingroup forms
+ */
+
+ function multi_example_form_third($form, &$form_state) {
+	$form['#attributes']['class'][] = 'gender_form_class'; //'personalisedfeeds_form_class';
+	$form['my_views_collect'] = array(
+    '#type' => 'markup',
+    '#markup' =>views_embed_view('final_select','page'),
+	'#default_value' => isset($form_state['object']->my_views_collect) ? $form_state['object']->my_views_collect : array(),
+    '#weight' => 1,
+  );
+ $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+ 
+ return $form;
+}
+
+/**
+ * Handles submit for third form.
+ */
+ 
+function multi_example_form_third_submit(&$form, &$form_state) {
+  $form_state['object']->my_views_collect = $form_state['values']['my_views_collect'];
+	$flag_personalised_collect = flag_get_user_flags('node');
+        $bid = user_pinboard();
+    
+	foreach($flag_personalised_collect['personalised'] as $key =>$value) {
+		$collect_nids[] = $key;
+		$node = node_load($key);
+		$following_uids[] = $node->uid;
+		$followerr[] = services_addfollowers_retrieved($node->uid);
+	
+		$repin_node[] = pinboard_helper_repins($key,$bid);
+		}
+    drupal_goto('user');	
+  
+}
+
+/**
+ * Handles validate for third form.
+ */
+ 
+function multi_example_form_third_validate(&$form, &$form_state) {
+	$flag_personalised_collect = flag_get_user_flags('node');
+	if(count($flag_personalised_collect['personalised'])<3){
+		form_set_error('my_views_collect','Please select at least 3 posts');
+	}
+
+}
+
+/**
+ * Returns form results.
+ *
+ * @param object $object
+ *   object with form values.
+ *   
+ * @return array
+ *   returns renderable array for multistep form result output.
+ */
+function multi_example_get_result($object) {
+$out = array();
+  $out[] = t('Your name: @name', array('@name' => $object->name));
+  $out[] = t('Your surname: @surname', array('@surname' => $object->surname));
+  $known = array_filter($object->know);
+  if (count($known)) {
+    $out[] = t('Your know: !know', array('!know' => implode(', ', $known)));
+  }
+  else {
+    $out[] = t("You don't know anything");
+  }
+  $out[] = t('You think drupal is !mind', array('!mind' => $object->drupal));
+  if ($object->work == 'yes') {
+    $out[] = t('You like cookies :)');
+  }
+  else {
+    $out[] = t("You don't like cookies :(");
+  }
+  return array('#theme' => 'item_list', '#items' => $out, '#title' => t('Results:'));
+	//drupal_goto('user');
+  }
+/**
+* Implements hook_entity_info_alter().
+*/
+function multi_example_entity_info_alter(&$entity_info) {
+  $entity_info['node']['view modes']['personalised'] = array(
+    'label' => t('Personalised Feed'),
+    'custom settings' => TRUE,
+  );
+}
+
+/**
+* Implements hook_preprocess_node().
+*/
+function multi_example_preprocess_node(&$vars) {
+  if($vars['view_mode'] == 'personalised') {
+    $vars['theme_hook_suggestions'][] = 'node__' . $vars['type'] . '__personalised';
+  }
+} 
+
+/**
+ * Implementation of hook_views_pre_render()
+ *
+ * @param view $view
+ */
+ 
+function multi_example_views_pre_render(&$view) {
+    if ('final_select' == $view->name ){
+		global $user;
+		if($user->uid){
+		
+		$uids = db_select('pinboard_follow','p')
+            ->condition('p.uid',$user->uid);
+        $uids->addExpression('distinct(p.aid)');
+		//get following users on $uids
+        $uids = $uids->execute()->fetchCol();
+		$results = array();
+		
+        if (count($uids)) foreach ($uids as $uidi) {
+            $ui = user_load($uidi);
+            if ($ui->uid) {
+			//get following users  posts on $results
+				$results[] = db_query('select  n.created as node_created,n.nid as nid from {node} n 
+				where n.uid = :uidi',array(':uidi'=>$uidi))->fetchAll();
+				
+				
+			}
+		}
+		$res_arr = array();
+		foreach($results as $result) {
+			$res_arr = array_merge($res_arr,$result);
+		}
+		foreach($res_arr as $nid) {
+		   //get nid_resarray as following users posts nids
+			$nid_resarray[] = $nid->nid;
+		}
+		//personalised category
+		$flag_category_bookmarks = flag_get_user_flags('taxonomy_term');
+		foreach($flag_category_bookmarks['category_bookmarks'] as $key =>$value) {
+			$tidkeys[] = $key;
+		}
+		
+		/* altering $view->result based on following post,gender - begin */
+		for($i=(count($view->result)-1);$i>=0;$i--) {
+		//for($i=0;$i<count($view->result);$i++) {
+			$node = node_load($view->result[$i]->nid);
+			$tid = field_get_items('node', $node, 'field_category1');//print_r($tid);exit;
+			$term = taxonomy_term_load($tid[0]['tid']);
+            $termname = $term->name;
+			$user_details = profile2_load_by_user($user); /* loading logged in user profile2 details */
+			$gender  = $user_details['gender']->field_ggender['und'][0]['value'];// $user_fields->field_gend['und']['0']['value'];
+			$gender = isset($gender) && ($gender == 'Female')? 'Women':'Men';
+			
+			if(in_array($view->result[$i]->nid,$nid_resarray)) {
+				
+				$temp_following[] = $view->result[$i];
+				unset($view->result[$i]);
+				
+			}
+			if(in_array($tid[0]['tid'],$tidkeys)) {
+				$temp_personalised_cat[] = $view->result[$i];
+				unset($view->result[$i]);
+				
+			}		
+			
+			if (strpos($termname,$gender) !== false){
+				$temp_gender[] = $view->result[$i];
+				unset($view->result[$i]);
+			}
+			
+			
+		}
+		//gender
+		for($i=0;$i<count($temp_gender);$i++)
+		{
+			array_unshift($view->result,$temp_gender[$i]);
+			
+		}
+		
+		//following post
+		for($i=0;$i<count($temp_following);$i++)
+		{
+			array_unshift($view->result,$temp_following[$i]);
+			
+		}
+		//personalised category
+		for($i=0;$i<count($temp_personalised_cat);$i++)
+		{
+			array_unshift($view->result,$temp_personalised_cat[$i]);
+			
+		}
+		//ecommerce_bookmarks
+		/*$flag = flag_get_user_flags('taxonomy_term');
+		foreach($flag['ecommerce_bookmarks'] as $personalised =>$value) {
+			$temp_ecommerce_bookmarks[] = $personalised;
+		}
+		for($i=0;$i<count($temp_ecommerce_bookmarks);$i++)
+		{
+			array_unshift($view->result,$temp_ecommerce_bookmarks[$i]);
+			
+		}*/
+		
+		
+		
+		
+		
+	
+		/* altering $view->result based on following - end */
+	  }
+	  else
+	  {
+		//$view->result = array();
+	  }
+	
+	}
+}
+
+
+/**
+* Callback function for adding followers
+*/
+function services_addfollowers_retrieved($uid)
+{	
+	global $user;
+	if ($user->uid) {
+   
+    $arg1 = $uid;
+    
+  //  echo $uid;exit;
+    if (is_numeric($arg1)) {
+     
+        $bids = db_select('pinboard_boards')
+        ->fields('pinboard_boards', array('bid'))
+        ->condition('uid', $arg1, '=')
+        ->execute()->fetchCol();
+        if (count($bids)) foreach ($bids as $bid) {
+          db_delete('pinboard_follow')
+          ->condition('uid', $user->uid)
+          ->condition('aid', $arg1)
+          ->condition('pid', $bid)
+          ->execute();
+          $query = db_insert('pinboard_follow')
+          ->fields(array('uid', 'aid', 'pid', 'timestamp'));
+          $query->values(array(
+            'uid' => $user->uid,
+            'aid' => $arg1,
+            'pid' => $bid,
+            'timestamp' => time(),
+          ));
+          $query->execute();
+        }
+      
+    }
+   return $uid;
+  } else {
+    return services_error(t('Anonymous user yields no result.'), 401);
+  }
+
+}
+/**
+ * Implementation of hook_block_info().
+ */
+function multi_example_block_info() {
+  $blocks['multi_step_login'] = array(
+    'info' => t('Multi Step Login'),
+  );
+ $blocks['multi_step_login_second'] = array(
+    'info' => t('Multi Step Login Second'),
+  );
+   $blocks['multi_step_login_third'] = array(
+    'info' => t('Multi Step Login Third'),
+  );
+
+ 
+  return $blocks;
+}
+ 
+/**
+ * Implementation of hook_block_view().
+ */
+function multi_example_block_view($delta='') {
+  $block = array();
+  switch ($delta) {
+    case 'multi_step_login':
+		$block['subject'] = t(""); 
+		$block['content'] = multi_example_form();
+	break;
+    case 'multi_step_login_second':
+		$block['subject'] = t(""); 
+		$block['content'] = drupal_get_form('multi_example_form_second');
+	break;
+    case 'multi_step_login_third':
+		$block['subject'] = t(""); 
+		$block['content'] = drupal_get_form('multi_example_form_third');
+	break;
+
+  }
+  return $block;    
+}
+
+
+?>

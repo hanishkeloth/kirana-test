@@ -1,0 +1,12 @@
+name = Auto image style
+description = Allows to apply an image style depending on whether the orientation of original image is portrait or landscape.
+dependencies[] = image
+dependencies[] = file
+package = Media
+core = 7.x
+; Information added by Drupal.org packaging script on 2014-08-14
+version = "7.x-1.2"
+core = "7.x"
+project = "auto_image_style"
+datestamp = "1408037030"
+

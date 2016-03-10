@@ -1,0 +1,712 @@
+<?php
+/**
+ * Implements of hook-menu().
+ */
+function personalization_menu(){
+  $items = array();
+  $items['admin/config/hashtag_activities'] = array(
+    'title' => t('Hashtags Activity Type and weight'),
+    'description' => 'Hashtags Activity Type and weight configurations',
+    'position' => 'left',
+    'weight' => -100,
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('Add push notifications'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+  $items['admin/config/hashtag_activities/action_type_weight/list'] = array(
+   'title' => t('Hashtags Activity Types'),
+   'description' => t('Hashtags Activity Types'),
+   'page callback' => '_get_all_activity_types',
+   'access arguments' => array('Add push notifications'),
+  );
+
+  $items['admin/config/hashtag_activities/activity_type_weight/add'] = array(
+   'title' => t('Add Hashtags Activity Types'),
+     'description' => t('Add Hashtags activity type weight'),
+     'page callback' => 'drupal_get_form',
+     'access arguments' => array('Add push notifications'),
+   'page arguments' => array('_activity_type_weight_form'),
+   'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/hashtag_activities/activity_type_weight/edit/%'] = array(
+   'title' => t('Edit Hashtags Activity Types'),
+   'description' => t('Edit Hashtags activity type weight'),
+   'page callback' => 'drupal_get_form',
+   'access arguments' => array('Add push notifications'),
+   'page arguments' => array('_activity_type_weight_form',5),
+   'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/hashtag_activities/activity_type_weight/%/delete'] = array(
+   'title' => 'Delete',
+   'page callback' => 'drupal_get_form',
+   'page arguments' => array('_activity_type_delete', 4),
+   'access arguments' => array('Add push notifications'),
+   'type' => MENU_CALLBACK,
+  );
+  $items['hashtags/colorbias'] = array(
+    'title' => 'Personalization calculation',
+    'page callback' => 'calculate_hashtags_colorbias',
+    'access callback' => TRUE,
+  );
+  $items['hashtags/tracking_sample/%/%/%'] = array(
+    'title' => 'Hashtags tracking sample',
+    'page callback' => '_track_hashtags_activity_sample',
+    'page arguments' => array(2,3,4),
+    'access callback' => TRUE,
+  );
+  $items['users/session_tracking_sample/%'] = array(
+    'title' => 'Users Session tracking sample',
+    'page callback' => '_calculate_ageing_equation',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+  );
+  $items['hashtags/daily_cumulative_score'] = array(
+    'title' => 'Calculate Daily and Cumulative Score of hashid and user id',
+    'page callback' => '_store_hashtag_daily_score',
+    'access callback' => TRUE,
+  );
+
+  return $items;
+}
+/**
+* Implements of hook_services_resources().
+*/
+
+function personalization_services_resources() {
+  $resource = array(
+    'hashtags_track' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Tracking Hashtags',
+          'callback' => '_personalization_hashtags_tracking',
+          'args' => array(
+            array(
+              'name' => 'type',
+              'optional' => FALSE,
+              'source' => array('param' => 'type'),
+              'type' => 'string',
+              'description' => 'Type of activity (view/like/share/shop/search/follow)',
+            ),
+            array(
+              'name' => 'value',
+              'optional' => FALSE,
+              'source' => array('param' => 'value'),
+              'type' => 'string',
+              'description' => 'Value of the activity (nid/search_keyword/hashtag_id)',
+            ),
+            array(
+              'name' => 'uid',
+              'optional' => FALSE,
+              'source' => array('param' => 'uid'),
+              'type' => 'string',
+              'description' => 'User Id',
+            ),
+          ),
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to node'),
+          'access arguments append' => FALSE,
+        ),
+      ),
+    ),
+  );
+  return $resource;
+}
+
+/**
+ * Track Hashtag activities for user
+ */
+
+function _personalization_hashtags_tracking($type,$value,$uid){
+  if($uid!=-1 && $uid!=0 && $uid!=1){
+    if($type == 'view' || $type == 'like' || $type == 'share' || $type == 'shop'){
+      $node = node_load($value);
+      $description = $node->body['und'][0]['value'];
+      $hashtags = _get_hashtags($description);
+    }else if($type == 'search'){
+      $search_text = $value;
+      $hashtags = _get_hashtags($search_text);
+    }else if($type == 'follow'){
+      $hashtags[] = $value;
+    }
+    foreach ($hashtags as $hashtag_id) {
+      if(isset($hashtag_id)){
+        _track_hashtags_activity($hashtag_id,$uid,$type);
+      }
+    }
+
+    //Track Shop Click Event
+    if($type == 'shop'){
+      db_insert('track_shop_event')
+      ->fields(array('track_date'=>strtotime(date('Y-m-d')),'nid' =>$value, 'uid' => $uid))
+      ->execute();
+    }
+  }
+}
+
+
+function _get_hashtags($description){
+  $tags_list = array();
+  $pattern = "/(^#|[^&]#)([0-9A-Za-z_]+)/";
+  preg_match_all($pattern, strip_tags($description), $tags_list);
+  $hashtags = implode(',', $tags_list[0]);
+  $hashtags_array = explode(',',$hashtags);
+  $hashtags_id_array = [];
+  foreach ($hashtags_array as $hashtag) {
+    $hashtag_term = taxonomy_get_term_by_name(trim($hashtag),'hashtags');
+    $hashtag_id = reset($hashtag_term);
+    $hashtags_id_array[] = $hashtag_id->tid;
+  }
+ return $hashtags_id_array;
+}
+
+function _track_hashtags_activity($hashtag_tid,$user_id,$activity_type){
+  $hashtag_weight = '';
+  $terms = taxonomy_term_load($hashtag_tid);
+  if(!empty($terms)){
+    $term_name = ucfirst(str_replace('#', '', $terms->name));
+
+    //Get Vocabulary Name of term id
+    $vocabulary_name = $terms->vocabulary_machine_name;
+    if($vocabulary_name == 'hashtags'){
+      $color_vocabulary = taxonomy_vocabulary_machine_name_load('color');
+      $color_term = taxonomy_get_term_by_name($term_name,'color');
+      if(!empty($color_term)){
+        $color_term = reset($color_term);
+        $vocabulary_name = $color_term->vocabulary_machine_name;
+        $hashtag_tid = $color_term->tid;
+      }
+    }
+    //Get all parent terms of Categories
+    $category_vocabulary = taxonomy_vocabulary_machine_name_load('categories');
+    $parent_categories = taxonomy_get_tree($category_vocabulary->vid,0,1);
+    $main_categories = [];
+    foreach ($parent_categories as $key => $category) {
+        array_push($main_categories,$category->name);
+    }
+    $input = preg_quote($term_name, '~');
+    $main_category = preg_filter('~' . $input . '~', null, $main_categories);
+
+    $query = db_query("SELECT awt.weight weight, NULL as cweight FROM hashtag_activities_type_weight awt WHERE awt.action_type='".$activity_type."'
+      UNION
+      SELECT NULL as weight,cw.color_weight cweight FROM color_weight cw where cw.color_id=".$hashtag_tid);
+    $weights = $query->fetchAll();
+    if(!empty($weights)){
+      //If hashtag is Color then weightage = activity type weight / colorbias
+      if($vocabulary_name == 'color') {
+        $hashtag_weight = $weights[0]->weight/$weights[1]->cweight;
+      }
+      //If hashtag is main category(Like men/clothing/women/footwear/accessories) then weightage =0
+      else if(!empty($main_category)){
+        $hashtag_weight = 0;
+      }
+      //If hashtag is not color and main category then weightage = activity type weight
+      else{
+        $hashtag_weight = $weights[0]->weight;
+      }
+    }
+    //echo "activity_weight=".round($hashtag_weight)."<br>";
+    //if(!empty($hashtag_weight)){
+      //$today_date = date('Y-m-d');
+    $today_date = date('Y-m-d');
+      //$today_date = date("Y-m-d",strtotime("-1 day"));
+      $query = db_select('hashtags_activities','ht')
+        ->fields('ht',array('no_of_times'))
+        ->condition('ht.hashtag_tid',$hashtag_tid,'=')
+        ->condition('ht.user_id',$user_id,'=')
+        ->condition('ht.activity_date',strtotime($today_date),'=')
+        ->condition('ht.activity_type',$activity_type,'=');
+      $hashtag_activity = $query->execute()->fetchField();
+      if(empty($hashtag_activity)){
+        $hashtag_act_val = array(
+          'hashtag_tid' => $hashtag_tid,
+          'user_id' => $user_id,
+          'activity_date' => strtotime($today_date),
+          'hashtag_weight' => round($hashtag_weight),
+          'activity_type' => $activity_type,
+          'no_of_times' => 1,
+        );
+        $hashtags_activities = db_insert('hashtags_activities')
+        ->fields($hashtag_act_val)
+        ->execute();
+      }else{
+        $no_of_times = intval($hashtag_activity)+1;
+        $hashtags_activities = db_update('hashtags_activities')
+        ->fields(array('hashtag_weight' => round($hashtag_weight),'no_of_times'=>$no_of_times))
+        ->condition('hashtag_tid',$hashtag_tid,'=')
+        ->condition('user_id',$user_id,'=')
+        ->condition('activity_date',strtotime($today_date),'=')
+        ->condition('activity_type',$activity_type,'=')
+        ->execute();
+      }
+    //}
+  }
+}
+
+
+/**
+ * Function to update the Hashtags weightage daily
+ * Daily score of #ID = For all activity for that date Sum of (weightage * number of times activity is done)
+ */
+function _store_hashtag_daily_score(){
+  $today = strtotime(date('Y-m-d'));
+  //$today = strtotime(date("Y-m-d",strtotime("-1 day")));
+  //Calculate Daily score of #ID
+  $query = db_select('hashtags_activities','ht')
+    ->fields('ht',array('user_id','hashtag_tid'))
+    ->condition('ht.activity_date',$today,'=');
+  $alias = $query->addExpression('sum(hashtag_weight*no_of_times)','daily_score');
+  $query->groupby('ht.user_id')
+  ->groupby('ht.hashtag_tid');
+  $daily_score_list = $query->execute()->fetchAll();
+  if(!empty($daily_score_list)){
+    foreach ($daily_score_list as $daily_score => $value) {
+      db_merge('hashtag_activities_daily_score')
+        ->key(array('hashtag_tid'=>$value->hashtag_tid,'user_id'=>$value->user_id,'activity_date'=>$today))
+        ->fields(array(
+        'hashtag_tid' => $value->hashtag_tid,
+        'user_id' => $value->user_id,
+        'activity_date' => $today,
+        'daily_score' => $value->daily_score,
+        ))
+       ->execute();
+    }
+
+    //Calculate cumulative score of hash id based on the daily score
+    _calculate_cumulative_score();
+    //_calculate_approx_ids();
+  }
+}
+
+/**
+ * Function to add the hashtag action type weight
+ */
+
+function _activity_type_weight_form($form, &$form_state,$activity_type_id=NULL){
+  if(!empty($activity_type_id) && $activity_type_id!=0){
+    $activity_types = _get_activity_type($activity_type_id);
+  }
+  $form['activity_type_id'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $activity_type_id,
+  );
+  $form['activity_type'] = array (
+   '#title' => t('Activity Type'),
+   '#type' => 'textfield',
+   '#required' => TRUE,
+   '#default_value' => isset($activity_types->action_type) ? $activity_types->action_type : '',
+  );
+  $form['activity_type_weight'] = array (
+   '#title' => t('Weight'),
+   '#type' => 'textfield',
+   '#required' => TRUE,
+   '#default_value' => isset($activity_types->weight) ? $activity_types->weight : '',
+  );
+  $form['submit'] = array(
+   '#type' => 'submit',
+   '#value' => t('Save'),
+  );
+  return $form;
+}
+
+function _activity_type_weight_form_submit($form, &$form_state) {
+  $activity_type = $form_state['values']['activity_type'];
+  $activity_type_weight= $form_state['values']['activity_type_weight'];
+  if(!empty($form_state['values']['activity_type_id']) && $form_state['values']['activity_type_id']!=0){
+    $activity_type_id = $form_state['values']['activity_type_id'];
+    $result = db_update('hashtag_activities_type_weight')
+      ->fields(array(
+        'action_type' => $activity_type,
+        'weight' => $activity_type_weight,
+      ))
+      ->condition('type_weight_id', $activity_type_id, '=')
+      ->execute();
+  }else{
+    $notification_id = db_insert('hashtag_activities_type_weight')
+    ->fields(array(
+      'action_type' => $activity_type,
+      'weight' => $activity_type_weight,
+    ))
+    ->execute();
+  }
+  drupal_set_message("Activity type updated successfully.");
+  drupal_goto("admin/config/hashtag_activities/action_type_weight/list");
+}
+
+function _get_all_activity_types(){
+  $output = l('Add Hashtags Activity Types','admin/config/hashtag_activities/activity_type_weight/add');
+  $header = array('Activity Type','Weight','Operations','');
+  $query = db_select('hashtag_activities_type_weight','atw')
+        ->fields('atw', array('type_weight_id','action_type','weight'));
+    $result = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+    $rows = array();
+
+    foreach($result as $record){
+        $rows[] = array(
+               $record['action_type'],
+               $record['weight'],
+               l('edit','admin/config/hashtag_activities/activity_type_weight/edit/'.$record['type_weight_id']),
+               l('delete', 'admin/config/hashtag_activities/activity_type_weight/'.$record['type_weight_id'].'/delete'),
+    );
+    }
+  $output.= theme('table', array('header' => $header,'rows' => $rows ));
+   return $output;
+}
+
+function _get_activity_type($activity_type_id) {
+  $query = db_select('hashtag_activities_type_weight', 'awt')
+    ->fields('awt', array('type_weight_id','action_type','weight'))
+    ->condition('awt.type_weight_id',$activity_type_id);
+  $result = $query->execute()->fetchAll();
+  if(!empty($result)){
+    return $result[0];
+  }else{
+    return NULL;
+  }
+}
+
+function _activity_type_delete($form, &$form_state, $activity_type) {
+  $form = array();
+  $form['activity_type_id'] = array(
+    '#type' => 'value',
+    '#value' => $activity_type,
+  );
+  return confirm_form($form,
+    t('Are you sure you want to delete this Activity Type?'),
+    'admin/config/hashtag_activities/action_type_weight/list',
+    t('This action cannot be undone.'),
+    t('Delete'),
+    t('Cancel')
+  );
+  return $form;
+}
+
+/**
+ * submit handler for the activity_type_delete
+ * this function is invoked only when the user clicks confirm button
+ * clickin on cancel, the user goes back to the $path
+ */
+function _activity_type_delete_submit($form, &$form_state) {
+  if (isset($form_state['values']['activity_type_id'])) {
+    $activity_type_id = $form_state['values']['activity_type_id'];
+    $delete_result = db_delete('hashtag_activities_type_weight')
+            ->condition('type_weight_id',$activity_type_id)
+            ->execute();
+  }
+  drupal_set_message('Activity Type deleted successfully');
+  $form_state['redirect'] = 'admin/config/hashtag_activities/action_type_weight/list';
+}
+
+
+/**
+ * Calculate Colorbias for the Color hashtags
+ * Formula : colorbias = min((Number of Wish IDs of that color)/(Avg number of Wish IDs per color),1)
+ */
+
+function calculate_hashtags_colorbias() {
+  //Get the count of all wishes/blogs/expression with published status
+  $query = db_select('node','n')
+  ->condition('n.type',array('pin','blog','expression'),'IN')
+  ->condition('n.status',1,'=');
+  $alias = $query->addExpression('COUNT(nid)','total_count');
+  $total_contents_count = $query->execute()->fetchField();
+
+  //Fetch all the Color terms tid and get the No. of wishes for each color
+  $color_vocabulary = taxonomy_vocabulary_machine_name_load('color');
+  $color_terms = taxonomy_get_tree($color_vocabulary->vid);
+  $total_color_terms = sizeof($color_terms);
+
+  //Calculate Avg number of #IDs per color
+  $color_avg = $total_contents_count/$total_color_terms;
+  $color = array();
+  $color_bias = '';
+  foreach($color_terms as $term) {
+      //Fetch all the nodes attached to a color
+      $all_contents = taxonomy_select_nodes($term->tid,FALSE);
+      if(!empty($all_contents)){
+        $total_color_contents = sizeof($all_contents);
+
+        //Calculate Colorbias for each color
+        $colorbias = round(max(($total_color_contents/$color_avg),1),2);
+      } else {
+        $colorbias = 0;
+      }
+
+      $color_weight = db_select("color_weight",'cw')
+        ->fields('cw',array('color_weight_id'))
+        ->condition('cw.color_id',$term->tid)
+        ->execute()->fetchField();
+      if(!empty($color_weight)){
+        db_update('color_weight')
+        ->fields(array(
+            'color_id' => $term->tid,
+            'color_weight' => $colorbias,
+          ))
+        ->condition('color_id',$term->tid,'=')
+        ->execute();
+      }else{
+        db_insert('color_weight')
+        ->fields(array(
+            'color_id' => $term->tid,
+            'color_weight' => $colorbias,
+          ))
+        ->execute();
+      }
+  }
+}
+
+function _track_hashtags_activity_sample($hashtag_tid,$user_id,$activity_type){
+  $hashtag_weight = '';
+  $terms = taxonomy_term_load($hashtag_tid);
+  echo "<pre>";print_r($terms);
+  if(!empty($terms)){
+    $term_name = ucfirst(str_replace('#', '', $terms->name));
+
+    //Get Vocabulary Name of term id
+    $vocabulary_name = $terms->vocabulary_machine_name;
+    if($vocabulary_name == 'hashtags'){
+      $color_vocabulary = taxonomy_vocabulary_machine_name_load('color');
+      $color_term = taxonomy_get_term_by_name($term_name,'color');
+      if(!empty($color_term)){
+        $color_term = reset($color_term);
+        $vocabulary_name = $color_term->vocabulary_machine_name;
+        $hashtag_tid = $color_term->tid;
+      }
+    }
+    //Get all parent terms of Categories
+    $category_vocabulary = taxonomy_vocabulary_machine_name_load('categories');
+    $parent_categories = taxonomy_get_tree($category_vocabulary->vid,0,1);
+    $main_categories = [];
+    foreach ($parent_categories as $key => $category) {
+        array_push($main_categories,$category->name);
+    }
+    $input = preg_quote($term_name, '~');
+    $main_category = preg_filter('~' . $input . '~', null, $main_categories);
+
+    $query = db_query("SELECT awt.weight weight, NULL as cweight FROM hashtag_activities_type_weight awt WHERE awt.action_type='".$activity_type."'
+      UNION
+      SELECT NULL as weight,cw.color_weight cweight FROM color_weight cw where cw.color_id=".$hashtag_tid);
+    $weights = $query->fetchAll();
+    if(!empty($weights)){
+      //If hashtag is Color then weightage = activity type weight / colorbias
+      if($vocabulary_name == 'color') {
+        $hashtag_weight = $weights[0]->weight/$weights[1]->cweight;
+      }
+      //If hashtag is main category(Like men/clothing/women/footwear/accessories) then weightage =0
+      else if(!empty($main_category)){
+        $hashtag_weight = 0;
+      }
+      //If hashtag is not color and main category then weightage = activity type weight
+      else{
+        $hashtag_weight = $weights[0]->weight;
+      }
+    }
+    echo "activity_weight=".round($hashtag_weight)."<br>";
+
+    if(isset($hashtag_weight)){
+      echo "activity_weight=".round($hashtag_weight)."<br>";
+      $today_date = date('Y-m-d');
+      $query = db_select('hashtags_activities','ht')
+        ->fields('ht',array('no_of_times'))
+        ->condition('ht.hashtag_tid',$hashtag_tid,'=')
+        ->condition('ht.user_id',$user_id,'=')
+        ->condition('ht.activity_date',strtotime($today_date),'=')
+        ->condition('ht.activity_type',$activity_type,'=');
+      $hashtag_activity = $query->execute()->fetchField();
+      if(empty($hashtag_activity)){
+        $hashtag_act_val = array(
+          'hashtag_tid' => $hashtag_tid,
+          'user_id' => $user_id,
+          'activity_date' => strtotime($today_date),
+          'hashtag_weight' => $hashtag_weight,
+          'activity_type' => $activity_type,
+          'no_of_times' => 1,
+        );
+        $hashtags_activities = db_insert('hashtags_activities')
+        ->fields($hashtag_act_val)
+        ->execute();
+      }else{
+        $no_of_times = intval($hashtag_activity)+1;
+        $hashtags_activities = db_update('hashtags_activities')
+        ->fields(array('hashtag_weight' => $hashtag_weight,'no_of_times'=>$no_of_times))
+        ->condition('hashtag_tid',$hashtag_tid,'=')
+        ->condition('user_id',$user_id,'=')
+        ->condition('activity_date',strtotime($today_date),'=')
+        ->condition('activity_type',$activity_type,'=')
+        ->execute();
+      }
+    }
+  }
+}
+
+
+/**
+ * Function to track the no.of times user opens an app.
+ */
+
+function _user_app_session_tracking($uid){
+  $today = strtotime(date('Y-m-d'));
+  //$today = strtotime(date("Y-m-d",strtotime("-1 week")));
+  $access_time = db_select('users_sessions_tracking', 'ust')
+    ->fields('ust',array('no_of_times_access'))
+    ->condition('ust.uid',$uid,'=')
+    ->condition('ust.timestamp',$today,'=')
+    ->execute()->fetchField();
+    if(empty($access_time)){
+      db_insert('users_sessions_tracking')
+        ->fields(array('uid' => $uid,'timestamp' => $today,'no_of_times_access' => 1))
+        ->execute();
+    }else{
+      $no_of_times_access = intval($access_time) + 1;
+      db_update('users_sessions_tracking')
+        ->fields(array('no_of_times_access' => $no_of_times_access))
+        ->condition('uid',$uid,'=')
+        ->condition('timestamp',$today,'=')
+        ->execute();
+    }
+}
+
+/**
+ * Function to calculate Ageing equation for the hashtags activities
+ */
+
+function _calculate_ageing_equation($uid){
+  $current_week = strtotime(date("Y-m-d",strtotime("-1 week")));
+  $ageing = 0.9775;
+  $query = db_select('users_sessions_tracking','ust')
+    ->condition('ust.timestamp',$current_week,'>=')
+    ->condition('ust.uid',$uid,'=');
+  $alias = $query->addExpression('SUM(no_of_times_access)','no_of_times_access');
+  $segment = $query->execute()->fetchField();
+  if(empty($segment)){
+    $ageing = 0.9886;
+  } else if($segment > 1 && $segment <= 4){
+    $ageing = 0.9775;
+  } else if($segment > 4){
+    $ageing=0.955;
+  }
+  return $ageing;
+}
+
+
+function _calculate_cumulative_score() {
+  $today = strtotime(date('Y-m-d'));
+  $daily_score_query = db_select("hashtag_activities_daily_score",'ds')
+    ->fields('ds',array('hashtag_tid','user_id','activity_date','daily_score'));
+  $daily_score_query->groupby('user_id')
+  ->groupBy('hashtag_tid')
+  ->groupBy('activity_date')
+  ->orderBy('activity_date','DESC');
+   $daily_score_list = $daily_score_query->execute()->fetchAll();
+  if(!empty($daily_score_list)){
+    //Caculate Cumulative score for each hashtag and user id
+
+    foreach ($daily_score_list as $daily_score => $daily_score_value) {
+      //Get ageing for each user for a week
+      $ageing = _calculate_ageing_equation($daily_score_value->user_id);
+
+      //Interval between current day and activity day
+      $interval = abs($today-$daily_score_value->activity_date)/60/60/24;
+      $cumulative_score = ($daily_score_value->daily_score * pow($ageing,$interval));
+      if(isset($final_cumulative_score[$daily_score_value->hashtag_tid][$daily_score_value->user_id])) {
+        $final_cumulative_score[$daily_score_value->hashtag_tid][$daily_score_value->user_id] += $cumulative_score;
+      } else {
+        $final_cumulative_score[$daily_score_value->hashtag_tid][$daily_score_value->user_id] = $cumulative_score;
+      }
+    }
+    foreach ($final_cumulative_score as $hashtag_key => $hashtag_value) {
+        foreach ($hashtag_value as $user_key => $value) {
+          db_merge('hashtag_activities_cumulative_score')
+          ->key(array('hashtag_tid' => $hashtag_key,'user_id' => $user_key))
+          ->fields(array(
+            'hashtag_tid' => $hashtag_key,
+            'user_id' => $user_key,
+            'cumulative_score' => $value,
+          ))
+          ->execute();
+        }
+    }
+
+    //Calculate approx. no. of Hashtag ids for each user based on the cumulative score
+    _calculate_approx_ids();
+  }
+}
+
+/**
+ * Calculate approx. no. of Hashtag ids for each user
+ *
+ */
+function _calculate_approx_ids() {
+
+  $total_hashid_query = db_select('hashtag_activities_cumulative_score','cs')
+    ->fields('cs',array('user_id'))
+    ->groupBy('user_id');
+  $alias = $total_hashid_query->addExpression('COUNT(hashtag_tid)','total_hashids');
+  $total_hashids = $total_hashid_query->execute()->fetchAll();
+  foreach ($total_hashids as $key => $value) {
+    //echo "<pre>";print_r($value);
+
+    //N = max(50,(total number of #IDs)/3)
+    $approx_ids = max(50,($value->total_hashids)/3);
+    //echo "N=".$approx_ids."<br>";
+
+    //H = ((total number of #IDs - 10)/4)
+    $each_quarter_val = floor(($value->total_hashids - 10)/4);
+    ///echo "Quartile H=".floor($each_quarter_val)."<br>";
+
+    if($each_quarter_val>10){
+      //T1 =min((N-10)*.5,H)
+      $quarter1 = min(($approx_ids - 10) * 0.5,floor($each_quarter_val));
+
+       //T2 =min((N-10) *.25,H)
+      $quarter2 = min(($approx_ids - 10) * 0.25,floor($each_quarter_val));
+
+       //T3 =min((N-10) *.15,H)
+      $quarter3 = min(($approx_ids - 10) * 0.15,floor($each_quarter_val));
+
+       //T4 =min((N-10) *.1,H)
+      $quarter4 = min(($approx_ids - 10) * 0.10,floor($each_quarter_val));
+    }
+    $top10_ids = db_select('hashtag_activities_cumulative_score','cs')
+      ->fields('cs',array('hashtag_tid'))
+      ->condition('cs.user_id',$value->user_id,'=')
+      ->orderBy('cs.cumulative_score','DESC')
+      ->range(0,10)
+      ->execute()->fetchAll();
+    foreach ($top10_ids as $top10 => $hashtag_id) {
+      $hashtags_ids[$value->user_id][] = $hashtag_id->hashtag_tid;
+    }
+
+
+    if($each_quarter_val>10){
+       $quartely_query = "(SELECT hashtag_tid FROM (SELECT hashtag_tid FROM hashtag_activities_cumulative_score WHERE user_id=".$value->user_id." ORDER BY cumulative_score DESC LIMIT 11,".floor($each_quarter_val).") Derived ORDER BY RAND() LIMIT ".floor($quarter1).")
+          UNION ALL
+          (SELECT hashtag_tid FROM (SELECT hashtag_tid FROM hashtag_activities_cumulative_score WHERE user_id=".$value->user_id." ORDER BY cumulative_score DESC LIMIT ".(11 + floor($each_quarter_val)).",".floor($each_quarter_val).") Derived ORDER BY RAND() LIMIT ".floor($quarter2).")
+          UNION ALL
+          (SELECT hashtag_tid FROM (SELECT hashtag_tid FROM hashtag_activities_cumulative_score WHERE user_id=".$value->user_id." ORDER BY cumulative_score DESC LIMIT ".(11 + (floor($each_quarter_val) * 2)).",".floor($each_quarter_val).") Derived ORDER BY RAND() LIMIT ".floor($quarter3).")
+          UNION ALL
+          (SELECT hashtag_tid FROM (SELECT hashtag_tid FROM hashtag_activities_cumulative_score WHERE user_id=".$value->user_id." ORDER BY cumulative_score DESC LIMIT ".(11 + (floor($each_quarter_val) * 3)).",".floor($each_quarter_val).") Derived ORDER BY RAND() LIMIT ".floor($quarter4).")";
+
+      //echo $quartely_query;
+      $quartely_hashtags = db_query($quartely_query)->fetchAll();
+      foreach ($quartely_hashtags as $quarter_hashtag => $quarter_hashtag_value) {
+        $hashtags_ids[$value->user_id][] = $quarter_hashtag_value->hashtag_tid;
+      }
+    }
+  }
+
+  if(!empty($hashtags_ids)){
+    foreach ($hashtags_ids as $hashtag_user => $final_hashtag_ids) {
+      foreach ($final_hashtag_ids as $hashtag_key => $hashtag_tid) {
+          db_merge('user_hashtags')
+          ->key(array('tid' => $hashtag_tid,'uid' => $hashtag_user))
+          ->insertFields(array(
+            'tid' => $hashtag_tid,
+            'uid' => $hashtag_user,
+          ))
+          ->execute();
+      }
+    }
+  }
+
+}

@@ -1,0 +1,9 @@
+name = Facebook OAuth Extras
+description = Provides extras features for the FBOAuth module
+core = 7.x
+
+dependencies[] = fboauth
+dependencies[] = ctools
+
+files[] = includes/views_handler_field_invite_fboauth_friend_link.inc
+files[] = includes/views_handler_field_fboauth_facebook_picture.inc

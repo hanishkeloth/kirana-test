@@ -1,0 +1,6 @@
+name = Push Notification
+description = Push Notification custom module
+core = 7.x
+version = "7.31"
+project = "drupal"
+datestamp = "1407346433"

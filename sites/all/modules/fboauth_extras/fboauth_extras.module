@@ -1,0 +1,686 @@
+<?php
+
+/**
+ * Implements hook_init().
+ */
+function fboauth_extras_init() {
+  // @todo Consider setting the javascript object that fb.module would expect from fb_connect.module?
+  $settings = array(
+    'fboauth_extras' => array(
+      'appId' => variable_get('fboauth_id', ''),
+      'redirectUri' => url('fboauth_extras/redirect_uri', array('absolute' => TRUE)),
+      'basePath' => url('', array('absolute' => TRUE)),
+    ),
+  );
+  drupal_add_js($settings, 'setting');
+  drupal_add_js( drupal_get_path('module', 'fboauth_extras') . '/includes/fboauth_extras.js', array('type' => 'file'));
+}
+
+/**
+ * Implements hook_menu().
+ */
+function fboauth_extras_menu() {
+  $items['fboauth_extras/invite/friends'] = array(
+    'title' => 'Invite my Facebook friends',
+    'page callback' => 'fboauth_extras_page',
+    'access arguments' => array('invite facebook friends'),
+    'file' => 'includes/fboauth_extras.pages.inc',
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['fboauth_extras/invite/accept/%user'] = array(
+    'title' => 'Accept invite',
+    'page callback' => 'fboauth_extras_accept',
+    'page arguments' => array(1),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/config/people/fboauth_extras'] = array(
+    'title' => t('Facebook OAuth Friends settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fboauth_extras_settings_form'),
+    'access arguments' => array('administer users'),
+    'file' => 'includes/fboauth_extras.pages.inc',
+    'description' => 'Configure importing and managing friends of Facebook OAuth users.',
+    'type' => MENU_NORMAL_ITEM,
+  );
+  
+  $items['fboauth_extras/redirect_uri/%/%'] = array(
+    'page callback' => 'fboauth_extras_fb_redirect_uri',
+    'page arguments' => array(2, 3),
+    'access callback' => TRUE,
+    'file' => 'includes/fboauth_extras.pages.inc',
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function fboauth_extras_permission() {
+  return array(
+    'invite facebook friends' => array(
+      'title' => t('invite facebook friends'),
+      'description' => t('Allow users to invite their Facebook friends.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function fboauth_extras_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'fboauth_extras') . '/includes',
+  );
+}
+
+/**
+ * Implements hook_fboauth_actions().
+ */
+function fboauth_extras_fboauth_actions() {
+  $actions['fboauth_extras_friends_import'] = array(
+    'title' => t('Import your friends'),
+    'callback' => 'fboauth_extras_fboauth_action_friends_import',
+  );
+  $actions['fboauth_extras_feed_push'] = array(
+    'title' => t('Request recommendation from friends'),
+    'callback' => 'fboauth_extras_fboauth_action_feed_push',
+    'permissions' => array(
+      'publish_stream',
+    ),
+  );
+  return $actions;
+}
+
+/**
+ * Alter the list of Facebook Actions provided through hook_fboauth_actions().
+ *
+ * @see fboauth_fboauth_actions().
+ */
+function fboauth_extras_fboauth_actions_alter(&$actions) {
+  // Replace the normal login callback with custom login callback.
+  $actions['connect']['callback'] = 'fboauth_extras_fboauth_action_connect';
+}
+
+
+/**
+ * Override Facebook OAuth callback for initiating a Facebook connection.
+ * The main difference is that we set $_SESSION['access_token']
+ * and call fboauth_extras_fboauth_action_friends_import() upon connection.
+ * This would be better handled if fboauth supplied a hook on user login.
+ */
+function fboauth_extras_fboauth_action_connect($app_id, $access_token) {
+  global $user;
+  $fbuser = fboauth_graph_query('me', $access_token);
+
+  if (isset($fbuser->id)) { 
+    $uid = fboauth_uid_load($fbuser->id);
+    // If the user has logged in before, load their account and login.
+    if (!$user->uid && $uid && ($account = user_load($uid))) {
+      fboauth_login_user($account);
+    }
+    // If the Facebook e-mail address matches an existing account, bind them
+    // together and log in as that account.
+    elseif (!empty($fbuser->email) && ($account = array_shift(user_load_multiple(array(), array('mail' => $fbuser->email))))) {
+      fboauth_save($account->uid, $fbuser->id);
+      // Logins will be denied if the user's account is blocked.
+      if (fboauth_login_user($account)) {
+        drupal_set_message(t('You\'ve connected your account with Facebook.'));
+        // TRIGGER ACTIONS.
+        fboauth_extras_trigger($app_id, $access_token, $account);
+      }
+    }
+    else {
+      // If the user is already logged in, associate the two accounts.
+      if ($user->uid) {
+        // TRIGGER ACTIONS.
+        fboauth_extras_trigger($app_id, $access_token, $user);
+      
+        fboauth_save($user->uid, $fbuser->id);
+        drupal_set_message(t('You\'ve connected your account with Facebook.'));
+      }
+      // Register a new user only if allowed.
+      elseif (variable_get('user_register', 1)) {
+        $account = fboauth_create_user($fbuser);
+        // Load the account fresh just to have a fully-loaded object.
+        $account = user_load($account->uid);
+      
+        // TRIGGER ACTIONS.
+        fboauth_extras_trigger($app_id, $access_token, $account);
+            
+        // If the account requires administrator approval the new account will
+        // have a status of '0' and not be activated yet.
+        if ($account->status == 0) {
+          _user_mail_notify('register_pending_approval', $account);
+          drupal_set_message(t('An account has been created for you on @sitename but an administrator needs to approve your account. In the meantime, a welcome message with further instructions has been sent to your e-mail address.', array('@sitename' => variable_get('site_name', ''))));
+        }
+        // Log in the user if no approval is required.
+        elseif (fboauth_login_user($account)) {
+          drupal_set_message(t('Welcome to @sitename. Basic information has been imported from Facebook into your account. You may want to <a href="!edit">edit your account</a> to confirm the details and set a password.', array('@sitename' => variable_get('site_name', ''), '!edit' => url('user/' . $account->uid . '/edit'))));
+        }
+        // If the login fails, fboauth_login_user() throws its own error message.
+      }
+      // Since user's can't create new accounts on their own, show an error.
+      else {
+        drupal_set_message('Your Facebook e-mail address does not match any existing accounts. If you have an account, you must first log in before you can connect your account to Facebook. Creation of new accounts on this site is disabled.');
+      }
+    }
+  }
+
+
+  // Facebook OAuth Friends overrides.
+  // For some reason, these don't after fboauth_create_user().
+  // If the user is successfully connected, import friends.
+  if ($fbid = fboauth_fbid_load($uid)) {
+    fboauth_extras_trigger($app_id, $access_token, $account);
+  }  
+}
+
+/**
+ * Triggers all fboauth_extras custom actions.
+ */
+function fboauth_extras_trigger($app_id, $access_token, $account) {
+  $_SESSION['fboauth_extras']['access_token'] = $access_token;
+  if (variable_get('fboauth_extras_friends_import', 1)) {
+    fboauth_extras_fboauth_action_friends_import($app_id, $access_token, $account);
+  }    
+  if (variable_get('fboauth_picture_import', 0)) {
+    fboauth_extras_fboauth_action_picture_import($app_id, $access_token);
+  }
+}
+
+/**
+ * Facebook OAuth action callback; Import a user's Facebook picture.
+ */
+function fboauth_extras_fboauth_action_picture_import($app_id, $access_token) {
+  global $user;
+  $fbuser = fboauth_graph_query('me', $access_token);
+  
+  // Retrieve the user's picture from Facebook and save it locally.
+  if (isset($fbuser) && $user->uid && !$user->picture && variable_get('user_pictures', 0)) {
+    $picture_directory =  file_default_scheme() . '://' . variable_get('user_picture_path', 'pictures');
+    if(file_prepare_directory($picture_directory, FILE_CREATE_DIRECTORY)){
+      $picture_result = drupal_http_request('https://graph.facebook.com/' . $fbuser->id . '/picture?type=large');
+      $picture_path = file_stream_wrapper_uri_normalize($picture_directory . '/picture-' . $user->uid . '-' . REQUEST_TIME . '.jpg');
+      $picture_file = file_save_data($picture_result->data, $picture_path, FILE_EXISTS_REPLACE);
+
+      // Check to make sure the picture isn't too large for the site settings.
+      $max_dimensions = variable_get('user_picture_dimensions', '85x85');
+      file_validate_image_resolution($picture_file, $max_dimensions);
+
+      // Update the user record.
+      $picture_file->uid = $user->uid;
+      $picture_file = file_save($picture_file);
+      file_usage_add($picture_file, 'user', 'user', $user->uid);
+      db_update('users')
+        ->fields(array(
+        'picture' => $picture_file->fid,
+        ))
+        ->condition('uid', $user->uid)
+        ->execute();
+    }
+  }
+}
+
+/**
+ * Facebook OAuth action callback; Import a user's Facebook friends.
+ */
+function fboauth_extras_fboauth_action_friends_import($app_id, $access_token, $account) {
+  // @todo Run only at admin specified intervals.
+  
+  $result = fboauth_graph_query('me/friends', $access_token);
+  foreach ($result->data as $friend) {
+    $name = explode(' ', $friend->name);
+    $friends[$friend->id] = array(
+      'uid' => $account->uid,
+      'fbid' => $friend->id,
+      'name' => $friend->name,
+      'first_name' => $name[0],
+      'last_name' => $name[1],
+      'changed' => REQUEST_TIME,
+    );
+    $fbids[] = $friend->id;
+  }
+  
+  if (isset($friends)) {
+    // db_merge() queries don't support multiple rows. To reduce
+    // database hits, we will first query the db to find existing friends, 
+    // then build a multi-insert query.
+    $query = db_select('fboauth_friends', 'fif')
+      ->fields('fif', array('fbid', 'fbid'))
+      ->condition('uid', $account->uid);
+      //->condition('fbid', $fbids, 'IN')
+    $existing_friends = $query->execute()->fetchAllKeyed();
+
+    // Insert new friends.
+    if ($new_friends = array_diff_key($friends, $existing_friends)) {
+      $query = db_insert('fboauth_friends')
+        ->fields(array('uid', 'fbid', 'name', 'first_name', 'last_name', 'changed'));
+      foreach ($new_friends as $record) {
+        $query->values($record);
+      }
+      $query->execute();
+    }
+
+    if (variable_get('fboauth_extras_update', 1)) {    
+      // Update friend entries. Unforunately, we need db query per row.
+      if ($extant_friends = array_intersect_key($friends, $existing_friends)) {
+        foreach ($extant_friends as $record) {
+          $num_updated = db_merge('fboauth_friends')
+            ->fields(array(
+            'name' => $record['name'],
+            'first_name' => $record['first_name'],
+            'last_name' => $record['last_name'],
+            'changed' => REQUEST_TIME))
+            ->condition('fbid', $record['fbid'])
+            ->condition('uid', $account->uid)
+            ->execute();
+        }
+        // Delete friends that user has unfriended.
+        if ($extinct_friends = array_diff_key($existing_friends, $extant_friends)) {
+          $num_deleted = db_delete('fboauth_friends')
+            ->condition('fbid', $extinct_friends, 'IN')
+            ->execute();
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function fboauth_extras_theme() {
+  return array(
+    'fboauth_extras_form' => array(
+      'variables' => array(
+        'request_form_attributes' => array(),
+        'friends_selector_attributes' => array(),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_block_view().
+ *
+ * This hook generates the contents of the blocks themselves.
+ */
+function fboauth_extras_block_view($delta = '') {
+  switch ($delta) {
+    case 'fb_popup_connect':
+      $block['subject'] = '<none>';
+      $block['content'] = fboauth_extras_block_contents($delta);
+      break;   
+    case 'fb_post_wall':
+      $block['subject'] = 'Post to your wall';
+      $block['content'] = fboauth_extras_block_contents($delta);
+      break;
+  }
+  return $block;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function fboauth_extras_block_info() {
+  $blocks['fb_popup_connect'] = array(
+    'info' => t('Facebook Friends: Login with Facebook'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['fb_post_wall'] = array(
+    'info' => t('Facebook Friends: Post to Wall'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * A module-defined block content function.
+ */
+function fboauth_extras_block_contents($which_block) {
+  global $user;
+  $content = '';
+
+  switch ($which_block) {
+    case 'fb_popup_connect':
+      // Build the return query string.
+      $query = array();
+      if (isset($redirect)) {
+        $query['destination'] = $redirect;
+      }
+      elseif (!empty($_GET['destination'])) {
+        $query['destination'] = $_GET['destination'];
+      }
+      $settings = array(
+        'mymodule_registration' => array(
+          'appId' => variable_get('fboauth_id', ''),
+          'redirect_uri' => fboauth_action_url('fboauth/connect', array('absolute' => TRUE, 'query' => $query)),
+          //'channelUrl' => '',
+        ),
+      );
+      drupal_add_js($settings, 'setting');
+      $link = fboauth_action_link_properties('connect');
+      $fbml = '<fb:login-button show-faces="false" scope="' . $link['query']['scope'] . '">' . 'Login with Facebook'. '</fb:login-button>';
+
+      $content[] = $fbml;
+      $content[] = '<div id="fb-root"></div>';
+      return implode($content);
+      break;
+
+    case 'fb_post_wall':
+      if (fboauth_fbid_load($user->uid)) {
+        return drupal_get_form('fboauth_extras_post_wall_form');
+      }
+      break;
+  }
+}
+
+function fboauth_extras_post_wall_form($form, &$form_state) {
+  $form['message'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Write something...'),
+    '#rows' => 2,
+  );
+  $form['preview'] = array(
+    '#type' => 'fieldset',
+  );
+  $form['preview']['picture'] = array(
+    '#markup' => theme('image', array(
+      'path' => url(drupal_get_path('theme', 'slick') . '/images/logo-small.png', array('absolute' => TRUE)), 
+      'alt' => t('TrustPages.com'),
+      'title' => t('TrustPages.com'),
+      'attributes' => array('class' => 'logo'),
+     )
+    ),
+  );
+  $form['preview']['name'] = array(
+    '#prefix' => '<div class="fboauth-friends-message-name">',
+    '#markup' => variable_get('fboauth_extras_post_wall_settings_name', ''),
+    '#suffix' => '</div>',
+  );
+  $form['preview']['description'] = array(
+    '#prefix' => '<div class="fboauth-friends-message-desc">',
+    '#markup' => variable_get('fboauth_extras_post_wall_settings_description', ''),
+    '#suffix' => '</div>',
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Post to facebook wall'),
+  );
+
+
+  return $form;
+}
+
+function fboauth_extras_post_wall_form_submit($form, &$form_state) {
+  // Since we can't pass additional parameters to fboauth actions,
+  // we will cache the data for later use. This array will
+  // be directly appended to the graph api query.
+  $data = array(
+    'link' => url('<front>', array('absolute' => TRUE)),
+    'picture' => url(drupal_get_path('theme', 'slick') . '/images/logo-small.png', array('absolute' => TRUE)),
+    'name' => variable_get('fboauth_extras_post_wall_settings_name', ''),
+    'caption' => $form_state['values']['message'],
+    'description' => variable_get('fboauth_extras_post_wall_settings_decription', ''),
+    'app_id' => variable_get('fboauth_id', ''),
+  );
+  fboauth_extras_set_page_cache('fboauth_extras_post_wall', $data);
+  
+  // Extract the link from a given fboauth action.
+  $fb_link = fboauth_action_link_properties('fboauth_extras_feed_push');
+  // Extract the request url from a given fboauth action link, including the query parameters.
+  $fb_query_url = url($fb_link['href'], array('absolute' => TRUE, 'query' => $fb_link['query']));
+
+  // Redirect user to facebook for authorization.
+  drupal_goto($fb_query_url);
+}
+
+/**
+ * Fboauth action. Pushes data to facebook wall.
+ */
+function fboauth_extras_fboauth_action_feed_push($app_id, $access_token) {
+  $parameters = fboauth_extras_get_page_cache('fboauth_extras_post_wall');
+  fboauth_extras_clear_page_cache('fboauth_extras_post_wall');
+
+  $response = fboauth_graph_query('me/feed', $access_token, $parameters, 'POST');
+  if (isset($response->id)) {
+    // $response->id is the post id of the feed post.
+    drupal_set_message(t('Your request has been posted to your Facebook wall. Friend will be able to respond to your request by making recommendations!'));
+  }
+  else {
+    watchdog('fboauth_extras', 'Error executing fboauth action: <br / > @error', array('@error' => (isset($reponse->error) ? $response->error : '')));
+    drupal_set_message(t("Oops! We couldn't post to your facebook wall. Please try again later."));
+  }
+
+  return '<front>';
+}
+
+function fboauth_extras_settings($form, &$form_state) {
+  $form['fboauth_extras_msg'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Invite message'),
+    '#default_value' => variable_get('fboauth_extras_msg', t('Enjoy facebook connect')),
+  );
+
+  $form['fboauth_extras_label'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Invite button label'),
+    '#default_value' => variable_get('fboauth_extras_label', t('Become a Member!')),
+  );
+
+  $form['fboauth_extras_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Your site name'),
+    '#default_value' => variable_get('fboauth_extras_name', variable_get('site_name', NULL)),
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Accepts $user as object or uid string.
+ */
+function fboauth_extras_load_friends($user = NULL) {
+  if ($user == NULL) {
+    global $user;
+  }
+  else if (!is_object($user)) {
+    $user = user_load($user);
+  }
+
+  $query = db_select('fboauth_friends', 'f')
+    ->fields('f')
+    ->condition('uid', $user->uid);
+  $friends = $query->execute()->fetchAll();
+
+  return $friends; 
+}
+
+/**
+ * Implements hook_user_delete().
+ */
+function fboauth_extras_user_delete($account) {
+  $num_deleted = db_delete('fboauth_friends')
+   ->condition('uid', $account->uid)
+   ->execute();
+}
+
+/**
+ * Create an invite.
+ */
+function fboauth_extras_create_invite($action, $to) {
+
+  // Create an empty invite.
+  $invite = invite_create();
+
+  // Set parameters.
+  //$invite->email = 'facebook-invite@trustpages.com';
+  $invite->data = array(
+    'type' => $action,
+    'fbid' => $to,
+  );
+
+  // Save it.
+  invite_save($invite);
+}
+
+/**
+ * Finds invites sent to a given facebook user.
+ */
+function fboauth_extras_find_invites($fbuser, $user = NULL) {
+  $query = db_select('invite', 'i');
+  $query
+    ->fields('i')
+    ->condition('joined', 0)
+    ->condition('canceled', 0)
+    ->condition('expiry', REQUEST_TIME, '>');
+  if ($user) {
+    $query->condition('uid', $user->uid);
+  }
+  $invites = $query->execute()->fetchAll();
+
+  // Filter invites to find facebook invites.
+  // @todo Possibly create separate table to store this information. It would be faster to query
+  // a fboauth_invites tables than to loop through all non-expired invitations here.
+  $fboauth_extras_invites = array();
+  foreach ($invites as $key => $invite) {
+    $data = unserialize($invite->data);
+    if (isset($data['type']) && $data['type'] == 'fboauth_extras_invite' && $data['fbid'] == $fbuser->id) {
+      // Mimic some of the variable set up found in invite_load().
+      $invite->inviter = user_load($invite->uid);
+      if ($invite->uid == 0) {
+        $invite->inviter->name = t('Anonymous');
+      }
+      $invite->data = $data;
+      $fboauth_extras_invites[$invite->iid] = $invite;
+    }
+  }
+
+  return count($fboauth_extras_invites) ? $fboauth_extras_invites : NULL;
+}
+
+/**
+ * Implements hook_fboauth_user_save().
+ */
+function fboauth_extras_fboauth_user_presave(&$edit, $fbuser) {
+  // Apply invite target roles.
+  if ($fbuser && $fboauth_extras_invites = fboauth_extras_find_invites($fbuser)) {
+    foreach ($fboauth_extras_invites as $iid => $invite) {
+      $roles = invite_target_roles($invite, $edit);
+      if ($roles) {
+        if (!isset($edit['roles']) || !is_array($edit['roles'])) {
+          $edit['roles'] = array();
+        }
+        foreach ($roles as $role) {
+          $edit['roles'][$role] = $role;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_fboauth_user_save().
+ */
+function fboauth_extras_fboauth_user_save($account, $fbuser) {
+  // If the user is deauthorizing facebook.
+  if (!$fbuser) {
+    // Delete saved list of friends from our local database.
+    $response = db_query("DELETE FROM {fboauth_friends} WHERE uid = :uid", array(':uid' => $account->uid));
+  }
+  elseif ($fboauth_extras_invites = fboauth_extras_find_invites($fbuser)) {
+    foreach ($fboauth_extras_invites as $iid => $invite) {
+      invite_process_invite($invite, $account);
+
+      module_invoke_all('invite_accept', $invite, $account);
+
+      // Flag the inviting user, this triggers status notifications and
+      // saves us some queries otherwise.
+      if (isset($invite->inviter->uid)) {
+        user_save($invite->inviter, array('data' => array('invite_accepted' => TRUE)));
+      }
+
+      if (isset($_SESSION)) {
+        unset($_SESSION[INVITE_SESSION]);
+      }
+    }
+  }
+}
+
+/**
+ * Facebook data conversion function.
+ * Converts an incoming Facebook location (which is an object) into an array compatible with the addressfield module.
+ */
+function fboauth_extras_field_convert_location($facebook_property_name, $fbuser, $field, $instance) {
+    $value = NULL;
+    if ($field['type'] == 'addressfield' && isset($fbuser->location) && module_exists('geocoder')) {
+      $geodata = geocoder('google', $fbuser->location->name);
+      foreach ($geodata->data['geocoder_address_components'] as $key => $components) {
+        switch($components->types[0]) {
+          // Set city.
+          case 'locality':
+            $value['locality'] = $components->short_name;
+            break;
+          // Set state.
+          case 'administrative_area_level_1':
+            $value['administrative_area'] = $components->short_name;
+            break;
+           // Set country.
+           case 'country':
+            $value['country'] = $components->short_name;
+            break;
+        }
+      }
+    }
+    return $value;
+}
+
+/**
+ * Get the cached changes to a given task handler.
+ */
+function fboauth_extras_get_page_cache($name) {
+  ctools_include('object-cache');
+  $cache = ctools_object_cache_get('fboauth_extras', $name);
+  if (!$cache) {
+    $cache = new stdClass();
+    $cache->locked = ctools_object_cache_test('fboauth_extras', $name);
+  }
+
+  return $cache;
+}
+
+/**
+ * Store changes to a task handler in the object cache.
+ */
+function fboauth_extras_set_page_cache($name, $data) {
+  ctools_include('object-cache');
+  $cache = ctools_object_cache_set('fboauth_extras', $name, $data);
+}
+
+/**
+ * Remove an item from the object cache.
+ */
+function fboauth_extras_clear_page_cache($name) {
+  ctools_include('object-cache');
+  ctools_object_cache_clear('fboauth_extras', $name);
+}
+
+/**
+ * Implements hook_fboauth_field_convert_info().
+ */
+/*
+function fboauth_extras_fboauth_field_convert_info_alter(&$convert_info) {
+  $convert_info += array(
+    'addressfield' => array(
+      'label' => t('Address Field'),
+      'callback' => 'fboauth_extras_fboauth_field_convert_location',
+    ),
+  );
+}
+*/

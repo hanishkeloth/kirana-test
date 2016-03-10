@@ -1,0 +1,13 @@
+name = Search Services
+description = Build service resources for search
+package = Services
+core = 7.x
+
+dependencies[] = services
+
+
+; Information added by Drupal.org packaging script on 2014-04-28
+version = "7.x-1.0-beta2"
+core = "7.x"
+project = "wishary_search"
+datestamp = "1398648228"

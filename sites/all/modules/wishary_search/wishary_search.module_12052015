@@ -1,0 +1,56 @@
+<?php
+/**
+* Implements of hook_services_resources().
+*/
+function wishary_search_services_resources() {
+	$resource = array(
+		'search' => array(
+			'operations' => array(
+				'index' => array(
+                    'help' => 'Searching the wishes',
+                    'file' => array('type' => 'inc', 'module' => 'wishary_search', 'name' => 'resources/wishary_search_resource'),
+                    'callback' => '_get_search_suggestions_results',
+                    'args' => array(
+                        array(
+                            'name' => 'term',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'term'),
+                            'type' => 'string',
+                            'description' => 'Keyword to be searched',
+                        ),
+                        array(
+                            'name' => 'type',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'type'),
+                            'type' => 'string',
+                            'description' => 'Type of search (Suggestons/results)',
+                        ),
+                        array(
+                            'name' => 'offset',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'offset'),
+                            'type' => 'int',
+                            'description' => 'start index',
+                        ),
+                        array(
+                            'name' => 'limit',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'limit'),
+                            'type' => 'int',
+                            'description' => 'limit index',
+                        ),
+                    ),
+                    'access callback' => '_search_access_provide_access',
+                    'access arguments' => array('view'),
+                    'access arguments append' => TRUE,
+                ),
+			),
+		),
+	);
+    return $resource;
+}
+
+/** * Access callback */
+function _search_access_provide_access() {
+  return TRUE;
+}

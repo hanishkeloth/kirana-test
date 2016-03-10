@@ -1,0 +1,11 @@
+<?php
+function loginpopup_custom_preprocess_page(&$vars) {
+global $user;
+if ($user->uid == 0) {
+$vars['loginpopup'] = "<div style='display:none'>" ;
+    $vars['loginpopup'] .= "<div id='login-pop'>" ;
+        $vars['loginpopup'] .= drupal_render(drupal_get_form('user_login'));
+        $vars['loginpopup'] .= "</div>";
+    $vars['loginpopup'] .= "</div>";
+}
+}

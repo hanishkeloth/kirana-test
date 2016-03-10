@@ -1,0 +1,4 @@
+name = services_home
+description = home resource 
+dependencies[] = services
+core = 7.x

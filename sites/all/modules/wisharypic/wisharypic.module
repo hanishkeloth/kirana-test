@@ -1,0 +1,16 @@
+<?php
+function wisharypic_services_resources_alter(&$resources)
+{
+  // Include MYMODULE.resource.inc
+  $resources['user']['operations']['update']['file'] = array
+  (
+    'type' => 'inc',
+    // replace with the name of your module
+    'module' => 'wisharypic',
+    // replace with the name and path to the file within your module
+    // folder. Leave off the .inc at the end.
+    'name' => 'wisharypic.resource', 
+  );
+  // This will be the new callback function for the user update resource
+  $resources['user']['operations']['update']['callback'] = '_wisharypic_user_resource_update';
+}

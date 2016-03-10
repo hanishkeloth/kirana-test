@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * @file
+ * jQuery Tabs Field install file.
+ */
+
+/**
+ * Implements hook_field_schema().
+ */
+function field_jquery_tabs_field_schema($field) {
+  if ($field['type'] == 'field_jquery_tabs') {
+    for ($i = 1; $i <= 7; $i++) {
+      $schema['columns']['tab_title_' . $i] = array(
+        'type' => 'varchar',
+        'length' => 50,
+        'not null' => FALSE,
+        'default' => '',
+      );
+      $schema['columns']['tab_body_' . $i] = array(
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => FALSE,
+      );
+    }
+
+    return $schema;
+  }
+}

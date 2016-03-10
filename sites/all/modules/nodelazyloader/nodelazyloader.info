@@ -1,0 +1,21 @@
+; @author: Daniel Honrade http://drupal.org/user/351112
+
+name = Node Lazyloader
+package = Lazyloader
+description = "Automatically lazyload nodes on windows scroll, makes sites with multiple nodes load faster."
+core = "7.x"
+dependencies[] = node
+
+files[] = nodelazyloader.install
+files[] = nodelazyloader.module
+files[] = nodelazyloader.admin.inc
+scripts[] = jquery.nodelazyloader.js
+stylesheets[all][] = nodelazyloader.css
+configure = admin/config/content/nodelazyloader
+
+; Information added by drupal.org packaging script on 2013-10-01
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "nodelazyloader"
+datestamp = "1380593463"
+

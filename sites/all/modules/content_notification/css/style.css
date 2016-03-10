@@ -1,0 +1,24 @@
+
+
+/* Notification Popup*/
+.notification-header{ padding:30px 30px 5px; float:left; width:90%; position:relative; }
+.notification-header a{background:url("images/notification-icon.png") 0px 15px no-repeat; width:30px; padding:20px; float:left;}
+.notification-header a:hover{background:url("images/notification-icon-o.png") 0px 15px no-repeat; padding:20px;}
+.notification-header span{background:#ff1a02; border-radius:50%; display:block; font-size:10px; left:21px; margin:0; position:absolute; text-align:center; top:45px; padding:1px 5px; color:#FFF;}
+.notification-header span:hover{ color:#FFF;}
+.notification-container2:after{ content:''; position:absolute; width:0px; height:0px; border-top:10px solid #000; border-left:10px solid transparent; border-right:10px solid transparent; top:-13px; left:25px; z-index:10;}
+
+.page-notifications .notification-container{ width:220px !important; display:block !important; float:left; margin-top:55px; left:0; border-radius:3px; background:#FFF; font-family: "Archivo Narrow",sans-serif; position:absolute; padding: 10px 10px; z-index:2; box-shadow:0 0 3px #333;}
+.notification-prd-box{ padding:5px 8%; float:left; width:85%;}
+.notificationpopup-left{ float:left; width:68%;}
+.notificationpopup-left a{ width:100% !important; float:left; font-size:11px !important; padding:5px 0 0 !important; text-decoration:none; color:#000 !important; background:none !important; line-height:normal !important; text-align:left !important;}
+.notificationpopup-left a:hover{ text-decoration: underline !important; background:none !important;}
+.notificationpopup-left a:hover:after{ display:none; background:none;}
+.notificationpopup-right{ float:right; padding-left:5%; text-align:right; display:inline-block; width:40px;}
+.notificationpopup-right img{ max-width:100%;}
+.notification-gender{border-radius:50%; max-width:100%; }
+.notif-more a{ width:100% !important; text-align:center !important; color:#cecece !important; text-decoration:none; border-top:1px solid #cecece; padding:15px 0 10px !important; float:left; font-size:13px !important; background:none !important;}
+.notif-more a:hover{ color:#000 !important; padding:15px 0 10px !important; background:none !important;}
+.notif-more a:hover:after{ display:none; background:none;}
+.notification-prd-box:hover{ background:#f8f8f8;}
+.notification-prd-box:hover:after{ display:none; background:none;}

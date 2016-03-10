@@ -1,0 +1,99 @@
+<?php
+/**
+ * @file
+ * Support module for testing the account-mail module.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function account_mail_test_menu() {
+  $items = array();
+  // This page contains a form where the user can update their own email
+  // address.
+  $items['account_mail_test__current_user'] = array(
+    'title' => 'Account mail test page - current user',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('account_mail_test__current_user_form'),
+    'access callback' => 'user_is_logged_in',
+  );
+  // This page contains a form where the user can update the email address of
+  // an abitrary user (whose UID is given as the page argument).
+  $items['account_mail_test__arbitrary_user/%'] = array(
+    'title' => 'Account mail test page - arbitrary user',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('account_mail_test__arbitrary_user_form', 1),
+    'access callback' => TRUE,
+  );
+  // As above, but contains a wrapper-element (to test form-value calculation
+  // when the account_mail element is a child of an element with #tree).
+  $items['account_mail_test__arbitrary_user_with_wrapper/%'] = array(
+    'title' => 'Account mail test page - arbitrary user',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('account_mail_test__arbitrary_user_with_wrapper_form', 1),
+    'access callback' => TRUE,
+  );
+
+  return $items;
+}
+
+/**
+ * Form callback.
+ */
+function account_mail_test__current_user_form() {
+  $form = array();
+  $form['arbitrary_string'] = array(
+    '#type' => 'account_mail',
+    '#title' => t('Email address'),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+
+
+/**
+ * Form callback.
+ */
+function account_mail_test__arbitrary_user_form($form, $form_state, $uid) {
+
+  $form = array();
+  $form['arbitrary_string'] = array(
+    '#type' => 'account_mail',
+    '#title' => t('Email address'),
+    '#uid' => $uid,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+
+
+/**
+ * Form callback.
+ */
+function account_mail_test__arbitrary_user_with_wrapper_form($form, $form_state, $uid) {
+
+  $form = array();
+  $form['wrapper_element'] = array(
+    '#tree' => TRUE,
+  );
+  $form['wrapper_element']['arbitrary_string'] = array(
+    '#type' => 'account_mail',
+    '#title' => t('Email address'),
+    '#uid' => $uid,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+

@@ -1,0 +1,1081 @@
+<?php
+
+/**
+* Implementing hook_menu
+*/
+function wishary_pin_menu(){
+	$items['wish/clone/%'] = array(
+     'title' => 'Clone the pin content',
+     'description' => "Cloning the pin content",
+     'page callback' => 'drupal_get_form',
+	 'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => 'user_is_logged_in',
+     'weight' => 10,
+    );
+	$items['demo/pin/mobile_node_clone/%'] = array(
+     'title' => 'Clone the pin content for mobile',
+     'description' => "Cloning the pin content for mobile",
+     'page callback' => '_demo_mobile_clone_node',
+	 'page arguments' => array(3),
+     'access callback' => TRUE,
+     'weight' => 10,
+    );
+	$items['admin/update_categories'] = array(
+    'title' => 'Update Categories to the content description field',
+    'page callback' => 'wishary_pin_retrieve_categories_stuff',
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+	$items['dev/pin/mobile_node_clone/%'] = array(
+    'title' => 'Clone the pin content for mobile',
+    'description' => "Cloning the pin content for mobile",
+    'page callback' => '_dev_mobile_clone_node',
+	  'page arguments' => array(3),
+    'access callback' => TRUE,
+    'weight' => 10,
+  );
+
+  $items['relavant/wishes/%'] = array(
+    'title' => 'Relavant Wishes',
+    'description' => "Related Wishes on detail page",
+    'page callback' => '_wish_detail_relevant_articles',
+    'access callback' => TRUE,
+    'page arguments' => array(2),
+    'weight' => 10,
+  );
+  $items['related-wishes'] = array(
+    'title' => 'Related Wishes',
+    'page callback' => '_wish_detail_relevant_wishesp',
+    'access callback' => TRUE,
+    'weight' => 10,
+  );
+
+  $items['related-articles'] = array(
+    'title' => 'Related Articles',
+    'page callback' => '_wish_detail_relevant_articlesp',
+    'access callback' => TRUE,
+    'weight' => 10,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function wishary_pin_block_info(){
+    $blocks = array();
+    $blocks['related_wishes'] = array(
+        'info' => t('Related Wishes'),
+    );
+    $blocks['related_wishes_articles'] = array(
+        'info' => t('Related Wishes Articles'),
+    );
+    return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+
+function wishary_pin_block_view($delta = '') {
+    $block = array();
+    switch ($delta) {
+      case 'related_wishes':
+        $block['subject'] = '';
+        $block['content'] = _wish_detail_relevant_wishes();
+        break;
+      case 'related_wishes_articles':
+        $block['subject'] = '';
+        $block['content'] = _wish_detail_relevant_articles();
+        break;
+    }
+    return $block;
+}
+
+/**
+ * Implements hook_block_theme().
+ */
+function wishary_pin_theme() {
+    return array(
+        'related_articles_blogs' => array(
+            'variables' => array('search_blogs' => array()),
+            'template' => 'themes/related_articles',
+        ),
+        'all_related_articles_blogs' => array(
+            'variables' => array('search_blogs' => array()),
+            'template' => 'themes/all_related_articles',
+        ),
+    );
+}
+
+/**
+* Function to load the node edit form to clone the node
+*/
+
+function wishary_pin_clone_form($form, &$form_state,$nid){
+  $original_node = node_load($nid);
+  $node = wishary_pin_clone_node_prepare($original_node);
+  $context = array('method' => 'prepopulate', 'original_node' => $original_node);
+  $form_state = array();
+  $form_state['build_info']['args'] = array($node);
+  form_load_include($form_state, 'inc', 'node', 'node.pages');
+  return drupal_build_form($node->type .'_node_form', $form_state);
+}
+
+
+/**
+* Function to prepare the node clone
+* argument - $original_node - Original node objcect
+*/
+
+function wishary_pin_clone_node_prepare($original_node){
+  global $user;
+  $node = clone $original_node;
+  $node->nid = NULL;
+  $node->vid = NULL;
+  $node->uid = $user->uid;
+  $node->name = $user->name;
+  $node->tnid = NULL;
+  $node->log = NULL;
+  $node->vuuid = NULL;
+  $node->created = NULL;
+  $node->path = NULL;
+  $node->files = array();
+  $node->field_parent_nid['und'][0]['value'] = $original_node->nid;
+  if(isset($original_node->field_node_family['und'])){
+  $node->field_node_family['und'][0]['value'] = $original_node->field_node_family['und'][0]['value'];
+  }else{
+  $node->field_node_family['und'][0]['value'] = $original_node->nid."_".$original_node->uid;
+  }
+  return $node;
+}
+
+/**
+* Implementing hook_form_alter
+*
+*/
+
+function wishary_pin_form_alter(&$form, &$form_state, $form_id){
+  switch($form_id){
+	case 'pin_node_form':
+	  $form['field_parent_nid']['#attributes']['style'][] = 'display:none;';
+	  $form['field_node_family']['#attributes']['style'][] = 'display:none;';
+	break;
+	case 'comment_node_pin_form':
+	  $form['field_original_cid']['#attributes']['style'][] = 'display:none;';
+    $form['field_node_comment_family']['#attributes']['style'][] = 'display:none;';
+    $form['field_comment_type']['#attributes']['style'][] = 'display:none;';
+    $form['#validate'][] = 'wishary_pin_comment_form_validate';
+	break;
+  }
+}
+
+/**
+* Implementing hook_node_insert
+*
+*/
+
+function wishary_pin_node_insert($node){
+  module_load_include('module', 'content_notification', 'content_notification');
+  if($node->type == 'pin'){
+    global $user;
+	if($node->field_parent_nid['und'][0]['value']==0){
+	 $node_family = $node->nid.'_'.$user->uid;
+	 $node->field_node_family['und'][0]['value'] = $node_family;
+	 field_attach_update('node', $node);
+	}
+	else if($node->field_parent_nid['und'][0]['value']!=0){
+	    $originial_node_uid = db_select('node', 'n')
+		->fields('n', array('uid'))
+		->condition('n.nid', $node->field_parent_nid['und'][0]['value'])
+		->execute()
+        ->fetchField();
+		if($user->uid != $originial_node_uid){
+          //$message = $user->name . " collected your post ";
+      $message = "Your wish is hot! ".$user->name." just rewished it. :-)";
+          _add_notification($originial_node_uid, $message,$node->nid, 'node',$user->uid, 'activity','post_collected');
+		}
+        _get_parent_node_comments($node->field_parent_nid['und'][0]['value'],$node->nid);
+     }
+     drupal_set_message("Woo hoo! You just created a wish. Give us a minute while we churn the web to find some awesome stuff.");
+  }
+}
+
+/**
+* Get parent node comments
+*
+*
+*/
+function _get_parent_node_comments($parent_nid, $current_nid){
+ $query = db_select('comment', 'c')
+ ->fields('c',array('cid'))
+ ->condition('c.nid', $parent_nid);
+ $result = $query->execute();
+ $i=1;
+ while($comment_id = $result->fetchAssoc()) {
+   $comments = comment_load($comment_id['cid']);
+   if($comments){
+    $comments->thread = $i.'/';
+	$comments->is_anonymous=0;
+	$comments->nid = $current_nid;
+	_comments_save($comments,$comment_id['cid']);
+   }
+   $i++;
+ }
+}
+
+
+/**
+* Save comments
+*
+**/
+function _comments_save($comments, $original_comment_id=0){
+    $comment_votes = _get_comment_votes($original_comment_id);
+	$new_comment = array(
+		'pid' => $comments->pid,
+		'nid' => $comments->nid,
+		'uid' => $comments->uid,
+		'subject' => $comments->subject,
+		'hostname' => $comments->hostname,
+		'created'  => $comments->created,
+		'changed' => $comments->changed,
+		'status' => $comments->status,
+		'thread' => $comments->thread,
+		'name' => $comments->name,
+		'mail' => $comments->mail,
+		'homepage' => $comments->homepage,
+		'language' => $comments->language,
+	);
+
+	$comment_id = db_insert('comment')
+	->fields($new_comment)
+	->execute();
+	$comments->cid = $comment_id;
+	$comments->field_original_cid['und'][0]['value'] = $original_comment_id;
+	$comments->field_suggestion_title['und'][0]['value'] = $comments->field_suggestion_title['und'][0]['value'];
+	comment_submit($comments);
+    comment_save($comments);
+	_save_comment_votes($comment_id, $comment_votes);
+
+}
+
+/**
+* Implementing hook_comment_insert
+*
+*/
+
+function wishary_pin_comment_insert($comment){
+  module_load_include('module', 'content_notification', 'content_notification');
+  global $user;
+  if($comment->node_type == 'comment_node_pin'){
+    if(!isset($comment->new)){
+      $comment_family = $comment->cid.'_'.$user->uid;
+      $comment->field_node_comment_family['und'][0]['value'] = $comment_family;
+      field_attach_update('comment', $comment);
+    }
+	$comment->field_original_cid['und'][0]['value'] = $comment->cid;
+    field_attach_update('comment', $comment);
+    $node = node_load($comment->nid);
+	if($node->uid!=$user->uid){
+    $notify_id = "";
+    if($comment->field_comment_type['und'][0]['value']=='system'){
+      $notify_id = db_select('content_notification','cn')
+        ->fields('cn',array('notify_id'))
+        ->condition('cn.entity_id',$comment->nid,'=')
+        ->execute()->fetchField();
+      //$message = "Hey, ".$user->name." we found what you were looking for. Check it out!";
+        $message = "Ta-da! We have recommendations for you. Check them out. :-)";
+      $message_type = "auto_recommendation_added";
+    }else{
+	   //$message = $user->name . " has recommended for you ";
+      $message = $user->name . " found what you wish'd for. Don't forget to show them some love. :-)";
+     $message_type = "manual_recommendation_added";
+    }
+    if(empty($notify_id)){
+      _add_notification($node->uid, $message, $comment->nid, 'comment',$user->uid,'activity',$message_type);
+    }
+	}
+	$family_nodes = _get_all_related_nodes($comment->nid);
+	_update_other_node_comments($comment->nid,$family_nodes,$comment);
+  }
+}
+
+function wishary_pin_comment_update($comment){
+  if(isset($comment->original->new) && $comment->original->new==0){
+    $field_list = field_info_instances("comment","comment_node_pin");
+    $all_related_comments = _get_all_related_comments($comment->cid);
+    foreach($all_related_comments as $related_comment_id){
+      if($related_comment_id!=$comment->cid){
+        foreach ($field_list as $field_key => $field_value) {
+          $comment_field_table = "field_data_".$field_key;
+          if($field_key == 'field_suggestion_image'){
+            $comment_field_name = $field_key."_fid";
+            $comment_field_value = $comment->{$field_key}['und'][0]['fid'];
+          } else if($field_key == 'field_suggestion_source'){
+            $comment_field_name = $field_key."_url";
+            $comment_field_value = $comment->{$field_key}['und'][0]['url'];
+          }else {
+            $comment_field_name = $field_key."_value";
+            $comment_field_value = $comment->{$field_key}['und'][0]['value'];
+          }
+          $query = db_update($comment_field_table)
+            ->fields(array($comment_field_name => $comment_field_value,))
+            ->condition('entity_id', $related_comment_id, '=')
+            ->execute();
+        }
+      }
+    }
+  }
+}
+
+function _get_family_node_value($nid){
+	$family_node_value = '';
+	$family_node_value = db_select('field_data_field_node_family','family_node')
+			  ->fields('family_node',array('field_node_family_value'))
+			  ->condition('family_node.entity_id',$nid)
+			  ->execute()->fetchField();
+	return $family_node_value;
+}
+
+/** Get all related nodes
+*
+**/
+function _get_all_related_nodes($comment_nid){
+	$family_node_value = '';
+	$relatedNodes = &drupal_static(__FUNCTION__, array());
+	$family_node_value = _get_family_node_value($comment_nid);
+	if(!empty($family_node_value)){
+		$result = db_select('field_data_field_node_family','family_node')
+			  ->fields('family_node',array('entity_id'))
+			  ->condition('family_node.field_node_family_value',$family_node_value)
+			  ->execute();
+		foreach ($result as $related_node) {
+			$relatedNodes[] = $related_node->entity_id;
+		}
+	}
+	return $relatedNodes;
+}
+
+
+/**
+* Insert comment to other related nodes
+*
+**/
+
+function _update_other_node_comments($original_nid,$node_ids,$comment){
+	if(!empty($node_ids)){
+	 $i=1;
+	 $k=0;
+	 $comments = clone ($comment);
+	 foreach($node_ids as $child_nodes){
+		if($child_nodes!=$original_nid){
+		  $comments->nid = $child_nodes;
+      $comments->field_node_comment_family['und'][0]['value'] = $comment->field_node_comment_family['und'][0]['value'];
+	      $comments->thread = $i.'/';
+	      $new_comment = _comments_save($comments, $comment->cid);
+	      $i++;
+		}
+	 }
+	}
+}
+
+/**
+* Implementing hook_node_view
+*
+**/
+function wishary_pin_node_view($node, $view_mode, $langcode) {
+  if($node->type == 'pin'){
+   hide($node->content['field_parent_nid']);
+   hide($node->content['field_node_family']);
+  }
+  if(arg(2) && is_numeric(arg(2))){
+	module_load_include('module', 'content_notification', 'content_notification');
+	notification_update_status(arg(2));
+  }
+}
+
+/**
+ * Implements hook_user_view_alter().
+ */
+function wishary_user_view_alter(&$build) {
+	if(arg(2) && is_numeric(arg(2))){
+	module_load_include('module', 'content_notification', 'content_notification');
+	notification_update_status(arg(2));
+  }
+}
+
+/**
+* Implementing hook_comment_delete
+*
+*/
+
+function wishary_pin_comment_delete($comment){
+	if($comment->field_original_cid['und'][0]['value']!=0){
+		_delete_other_related_comments($comment->field_original_cid['und'][0]['value']);
+	}
+   //_delete_orignial_related_comments($comment->cid);
+}
+
+/**
+* Get all the child node ids of comment node id (Tree nodes)
+*
+**/
+function _delete_other_related_comments($comment_original_id){
+  $cids = db_query('SELECT entity_id FROM {field_data_field_original_cid} WHERE field_original_cid_value = :comment_original_id', array(':comment_original_id' => $comment_original_id))->fetchCol();
+  //if(!empty($cids)){
+    comment_delete_multiple($cids);
+  //}
+}
+
+function _delete_orignial_related_comments($comment_id){
+   echo "comment id =".$comment_id;
+   echo 'SELECT field_original_cid_value FROM {field_data_field_original_cid} WHERE entity_id ='.$comment_id;
+   exit;
+	$other_cids = db_query('SELECT field_original_cid_value FROM {field_data_field_original_cid} WHERE entity_id = :comment_id', array(':comment_id' => $comment_id))->fetchCol();
+	echo "<pre>";print_r($other_cids);exit;
+	if(!empty($other_cids)){
+	  $cids = db_query('SELECT entity_id FROM {field_data_field_original_cid} WHERE field_original_cid_value = :comment_id', array(':comment_id' => $other_cids[0]))->fetchCol();
+      if(!empty($cids)){
+	    comment_delete_multiple($cids);
+      }
+	  comment_delete_multiple($other_cids);
+	}
+}
+
+/**
+* Get all the votes(likes) of the comments
+*
+**/
+function _get_comment_votes($comment_id){
+    $criteria['entity_id'] = $comment_id;
+	$votes = votingapi_select_votes($criteria);
+	return $votes;
+
+}
+
+/**
+* Save the votes(likes) for the cloned comments
+*
+**/
+function _save_comment_votes($new_comment_id, $votes){
+  foreach ($votes as $key => $vote) {
+    _votingapi_prep_vote($vote);
+    $votes[$key] = $vote; // Is this needed? Check to see how PHP4 handles refs.
+	$vote['entity_id']=$new_comment_id;
+	$vote['vote_id']='';
+	votingapi_add_votes($vote);
+  }
+  foreach ($votes as $vote) {
+    $vote['entity_id']=$new_comment_id;
+    $touched[$vote['entity_type']][$vote['entity_id']] = TRUE;
+  }
+  if (variable_get('votingapi_calculation_schedule', 'immediate') != 'cron') {
+    foreach ($touched as $type => $ids) {
+      foreach ($ids as $id => $bool) {
+        $touched[$type][$id] = votingapi_recalculate_results($type, $id);
+      }
+    }
+  }
+}
+
+/**
+* Clone the node using services on Demo environment
+*
+**/
+function _demo_mobile_clone_node($nid){
+  global $base_url;
+  $mobile_ws_url = $base_url.'/mobile_ept/nodeclone/';
+  $headers = array('Content-Type' => 'application/json');
+
+  $original_node = node_load($nid);
+  global $user;
+  $node = clone $original_node;
+  global $language;
+  $lang = $language->language;
+  $node->type = 'pin';
+  $node->nid = NULL;
+  $node->vid = NULL;
+  $node->uid = $user->uid;
+  $node->name = $user->name;
+  $node->tnid = NULL;
+  $node->log = NULL;
+  $node->vuuid = NULL;
+  $node->created = NULL;
+  $node->path = NULL;
+  $node->files = array();
+  $node->field_parent_nid['und'][0]['value'] = $original_node->nid;
+  //$node->field_category['und'] = $original_node->field_category['und'][0]['tid'];
+  $node->field_category1[$lang] = $original_node->field_category1[$lang][0]['tid'];
+  //$node->field_category1['zh-hans'] = $original_node->field_category1['zh-hans'][0]['tid'];
+  $node->body['und'][0]['format'] = $original_node->body[0]['format'];
+  $node_data = array(
+     'node_clone' => $node,
+	 'user' => $user,
+  );
+  $clone_node = json_encode($node_data);
+
+  $options = array('headers' => $headers, 'method' => 'POST', 'data' => $clone_node);
+  $response = drupal_http_request($mobile_ws_url, $options);
+  if($response->code == 200) {
+    echo "Node cloned successfully<br>";
+	echo "View the Node : ".$response->redirect_url;
+  }else{
+	echo "<pre>";print_r($response);
+  }
+  exit;
+}
+
+/**
+* Clone the node using services on Demo environment
+*
+**/
+function _dev_mobile_clone_node($nid){
+  global $base_url;
+  $mobile_ws_url = $base_url.'/mobile_ept/nodeclone/';
+  $headers = array('Content-Type' => 'application/json');
+
+  $original_node = node_load($nid);
+  global $user;
+  $node = clone $original_node;
+  global $language;
+  //echo "<pre>";print_r($user);exit;
+  $lang = $language->language;
+  $node->type = 'pin';
+  $node->nid = NULL;
+  $node->vid = NULL;
+  $node->uid = $user->uid;
+  $node->name = $user->name;
+  $node->tnid = NULL;
+  $node->log = NULL;
+  $node->vuuid = NULL;
+  $node->created = NULL;
+  $node->path = NULL;
+  $node->files = array();
+  $node->field_parent_nid['und'][0]['value'] = $original_node->nid;
+  //$node->field_category['und'] = $original_node->field_category['und'][0]['tid'];
+  $node->field_category1['zh-hans'] = $original_node->field_category1['zh-hans'][0]['tid'];
+  //$node->body['und'][0]['format'] = $original_node->body[0]['format'];
+  $node_data = array(
+     'node_clone' => $node,
+	 'user' => $user,
+  );
+  $clone_node = json_encode($node_data);
+
+  $options = array('headers' => $headers, 'method' => 'POST', 'data' => $clone_node);
+  $response = drupal_http_request($mobile_ws_url, $options);
+  if (isset($response->data) && !empty($response->data)) {
+	$response_data = json_decode($response->data);
+	if ($response->code == 200 && isset($response_data->nid) && $response_data->nid != 0) {
+		//print "Node cloned successfully";
+        echo ($response_data->nid);
+	}
+  }
+  //echo "<pre>";print_r($response_data->redirect_url);
+}
+
+
+/**
+* Implementing hook_rate_vote_alter
+* User notification for rating (like) node and comments
+*
+*/
+function wishary_pin_rate_vote_alter($votes, &$context) {
+  if(!empty($context['save'])){
+    module_load_include('module', 'content_notification', 'content_notification');
+    global $user;
+    if($votes['entity_type'] == 'node') {
+  	$node = node_load($votes['entity_id']);
+  	$entity_uid = $node->uid;
+  	$entity_id = $node->nid;
+  	//$message = $user->name . " liked your post ";
+    $message = "You just received some love from ".$user->name.", Let's see where?";
+    $message_type = "post_like";
+    }
+    else if($votes['entity_type'] == 'comment') {
+  	$comment = comment_load($votes['entity_id']);
+  	$original_cid = '';
+  	$field_original_cid = '';
+  	if($comment->field_original_cid['und'][0]['value'] == 0){
+  		$original_cid = $comment->cid;
+  		$field_original_cid = 0;
+  	}else{
+  		$original_cid = $comment->field_original_cid['und'][0]['value'];
+  		$field_original_cid = 1;
+  	}
+  	_get_other_related_comments($original_cid,$votes,$context['save'],$field_original_cid);
+  	$entity_uid = $comment->uid;
+  	$entity_id = $comment->nid;
+  	$comment_title = $comment->field_suggestion_title['und'][0]['value'];
+  	$message = $user->name . " thinks you're an angel. Let's see why?";
+    $message_type = "recommendation_like";
+    }
+    if(isset($entity_uid) && $user->uid!=$entity_uid){
+  	_add_notification($entity_uid, $message, $entity_id, $votes['entity_type'],$user->uid,'activity',$message_type);
+    }
+  }
+}
+
+function _get_other_related_comments($original_cid,$orig_votes,$vote_value,$field_original_cid){
+    $result = db_select('field_data_field_original_cid', 'org_cid')
+    ->fields('org_cid',array('entity_id'))
+    ->condition('org_cid.field_original_cid_value', $original_cid,'=')
+    ->execute();
+	$all_related_cid = array();
+
+	if($field_original_cid == 1){
+		$all_related_cid['entity_id'][] = $original_cid;
+	}
+	foreach($result as $comment_id){
+		$all_related_cid['entity_id'][] = $comment_id->entity_id;
+	}
+	foreach($all_related_cid as $each_comments){
+		while (list($key, $comment_id) = each ($each_comments)) {
+			if(!empty($vote_value)){
+				$vote = array(
+					'entity_type' => $orig_votes['entity_type'],
+					'entity_id' => $comment_id,
+					'value_type' => $orig_votes['value_type'],
+					'value' => $vote_value,
+					'tag' => $orig_votes['tag'],
+				);
+				$criteria['entity_id'] = $comment_id;
+				votingapi_set_votes($vote, $criteria);
+			}else{
+				$vote = array(
+					'entity_type' => $orig_votes['entity_type'],
+					'entity_id' => $comment_id,
+					'value_type' => $orig_votes['value_type'],
+					'tag' => $orig_votes['tag'],
+				);
+				$tmp = votingapi_current_user_identifier();
+				$tmp += $vote;
+				$tmp_v = votingapi_select_votes($tmp);
+				if (!empty($tmp_v)) {
+					votingapi_delete_votes($tmp_v);
+					_votingapi_delete_cache_by_entity($comment_id,'comment');
+				}
+			}
+		}
+	}
+}
+/** Get all related comments
+*
+**/
+function _get_all_related_comments($comment_cid){
+
+  $comment_family_value = '';
+  $comment_family_value = db_select('field_data_field_node_comment_family','comment_family')
+        ->fields('comment_family',array('field_node_comment_family_value'))
+        ->condition('comment_family.entity_id',$comment_cid)
+        ->execute()->fetchField();
+  $relatedComments = &drupal_static(__FUNCTION__, array());
+  if(!empty($comment_family_value)){
+    $result = db_select('field_data_field_node_comment_family','comment_family')
+        ->fields('comment_family',array('entity_id'))
+        ->condition('comment_family.field_node_comment_family_value',$comment_family_value)
+        ->execute();
+    foreach ($result as $related_comment) {
+      $relatedComments[] = $related_comment->entity_id;
+    }
+  }
+  return $relatedComments;
+}
+
+function wishary_pin_enable() {
+  // Check if comment_family field is not already created.
+  if (!field_info_field('field_node_comment_family')) {
+
+    // Create the field base.
+    $field = array(
+      'field_name' => 'field_node_comment_family',
+      'type' => 'text',
+    );
+    field_create_field($field);
+
+    // Create the field instance on the bundle.
+    $instance = array(
+      'field_name' => 'field_node_comment_family',
+      'entity_type' => 'comment',
+      'label' => 'comment_family',
+      'bundle' => 'comment_node_pin',
+    );
+    field_create_instance($instance);
+  }
+}
+
+
+/**
+ * Function to retrieve all node ids which is having categories
+ */
+function wishary_pin_retrieve_categories_stuff(){
+  $batch = array(
+    'operations' => array(),
+    'finished' => 'wishary_pin_update_batch_finished', // runs after batch is finished
+    'title' => t('Processing updating'),
+    'init_message' => t('Updating is starting...'),
+    'progress_message' => t('Processed @current out of @total.'),
+    'error_message' => t('Update has encountered an error.'),
+  );
+  $category_query = "SELECT n.nid nid,
+                     if(hr.parent='0', maincat.name, subcat.name) main_category,
+                     if(hr.parent='0', subcat.name, maincat.name) sub_category
+                              FROM field_data_field_category1 cat
+                              LEFT JOIN node n ON n.nid=cat.entity_id
+                              LEFT JOIN  taxonomy_term_data maincat ON (maincat.tid = cat.field_category1_tid AND maincat.vid=16)
+                              LEFT JOIN taxonomy_term_hierarchy hr ON hr.tid = maincat.tid
+                              LEFT JOIN  taxonomy_term_data subcat ON subcat.tid = hr.parent
+                              WHERE field_category1_tid IS NOT NULL LIMIT 11,1000
+                              ";
+  $categories_list = db_query($category_query)->fetchAll();
+  foreach ($categories_list as $node) {
+    drupal_set_message("before updating==".$node->nid);
+    $batch['operations'][] = array('_update_categories_stuff_process', array($node->nid,$node->main_category,$node->sub_category));
+  }
+  batch_set($batch);
+  batch_process('user'); // page to return to after complete
+}
+
+/**
+ * Function to update all nodes categories to description field
+ */
+function _update_categories_stuff_process($nid, $maincat, $subcat, &$context){
+  $node = node_load($nid);
+  // Do some stuff here to make changes...
+  $category = '';
+
+  if(!empty($maincat)) {
+    $category = $maincat;
+  }
+
+  if(!empty($subcat)) {
+    $category.= " - ". $subcat;
+  }
+  $category = $maincat;
+  $category.=  " - ". $maincat;
+  $search_keyword_array = explode(" - ", $category);
+  $categories_thread = array_unique($search_keyword_array, SORT_REGULAR);
+  $new_desc_value = $node->body['und'][0]['value'];
+  for($i=0;$i<count($categories_thread);$i++) {
+
+    $cat = ' #'.$categories_thread[$i];
+    drupal_set_message("cat=".$cat);
+    $pos = stripos($new_desc_value, $cat, 0);
+    if ($pos === false) {
+      $new_desc_value = $new_desc_value.$cat;
+      drupal_set_message("nid=".$nid."-".$new_desc_value);
+      $node->body['und'][0]['value'] = $new_desc_value;
+      node_save($node);
+      $new_desc_value = $node->body['und'][0]['value'];
+      drupal_set_message("updating ".$nid);
+      $context['message'] = t('Updating @nid - @descval', array('@nid' => $nid, '@descval' => $new_desc_value));
+    }
+  }
+}
+
+/**
+ * Implements hook_update_batch_finished().
+ */
+function wishary_pin_update_batch_finished($success, $results, $operations) {
+  if ($success) {
+    $message = count($results) . ' processed.';
+  }
+  else {
+    // An error occurred.
+    // $operations contains the operations that remained unprocessed.
+    $error_operation = reset($operations);
+    $message = 'An error occurred while processing ' . $error_operation[0] . ' with arguments :' . print_r($error_operation[0], TRUE);
+  }
+  drupal_set_message($message);
+  drupal_set_message(l('Run Batch Again', 'admin/update_categories'));
+}
+
+
+/**
+ * Extract common words description.
+ */
+function _extract_common_words($string) {
+  $stop_words = array('i', 'a', 'about', 'an', 'and', 'are', 'as', 'at', 'be',
+    'by', 'com', 'de', 'en', 'for', 'from', 'how', 'in', 'is', 'it', 'la', 'of',
+    'on', 'or', 'that', 'the', 'this', 'to', 'was', 'what', 'when', 'where',
+    'who', 'will', 'with', 'und', 'the', 'www',
+  );
+
+  // Replace whitespace.
+  $string = preg_replace('/\s\s+/i', '', $string);
+  // Trim the string.
+  $string = trim($string);
+  // Only take alphanumerical characters, but keep the spaces and dashes too.
+  $string = preg_replace('/[^a-zA-Z0-9 -]/', '', $string);
+  // Make it lowercase.
+  $string = strtolower($string);
+
+  preg_match_all('/\b.*?\b/i', $string, $match_words);
+  $match_words = $match_words[0];
+
+  foreach ($match_words as $key => $item) {
+    if ($item == '' || in_array(strtolower($item), $stop_words) || strlen($item) <= 3) {
+      unset($match_words[$key]);
+    }
+  }
+
+  $match_words = array_values(array_filter(array_unique($match_words)));
+
+  return $match_words;
+}
+
+/**
+ * Related articles in the wish details page.
+ */
+function _wish_detail_relevant_wishes() {
+  $nid = arg(1);
+  $node = node_load($nid);
+  if($node->type == 'blog'){
+    //$tags_text = $node->field_tag_blog['und'][0]['entity']->name;
+    $blog_tags = $node->field_tag_blog['und'];
+    $tags_text = '';
+    foreach ($blog_tags as $tags => $value) {
+      $tags_text.=$tags_text." ".$value['entity']->name;
+    }
+  }else {
+    $tags_text = $node->body['und'][0]['value'];
+  }
+  //$description = $node->body['und'][0]['value'];
+  //$tags_text = "#menshirt, #black, #solid, #stylemanual black shirt #women_footware. Hello how are you? ";
+  //$tags_text = $description;
+  $tags_text = str_replace(['_'], [' '], $tags_text);
+
+  $tags = _extract_common_words($tags_text);
+  //print_r($tags);
+
+  $keywords = implode("+",$tags);
+  $results_list = _wish_related_wishes_list(urldecode($keywords),0,6);
+  //echo "<pre>";print_r($results_list);exit;
+  $out .= '<div class="pin_page">';
+  $oute = '</div>';
+
+  $per_page = 6;
+  $current_page = pager_default_initialize(count($results_list), $per_page);
+      // Split your list into page sized chunks
+  $chunks = array_chunk($results_list, $per_page, TRUE);
+
+  $pp = theme('pager', array('quantity', count($results_list)));
+
+  // Initialise the pager
+
+  // Split your list into page sized chunks
+  $chunks = array_chunk($results_list, $per_page, TRUE);
+  $nodes = node_load_multiple($chunks[$current_page]);
+  $nodes = node_view_multiple($nodes);
+
+  if (!$pp or !isset($_GET['page']) or strpos($pp,'page='.$_GET['page']) or strpos($pp, '>'.($_GET['page'] + 1).'<'))
+  $out .= render($nodes);
+  $out .= $oute;
+  $out .= $pp;
+  return $out;
+}
+function _wish_detail_relevant_wishesp() {
+  $nid = $_REQUEST['wish_id'];
+  $node = node_load($nid);
+  $description = $node->body['und'][0]['value'];
+  //$tags_text = "#menshirt, #black, #solid, #stylemanual black shirt #women_footware. Hello how are you? ";
+  $tags_text = $description;
+  $tags_text = str_replace(['_'], [' '], $tags_text);
+
+  $tags = _extract_common_words($tags_text);
+  //print_r($tags);
+
+  $keywords = implode("+",$tags);
+  $results_list = _wish_related_wishes_list(urldecode($keywords));
+  //echo "<pre>";print_r($results_list);exit;
+  $out .= '<div class="pin_page">';
+  $oute = '</div>';
+
+  $per_page = 10;
+  $current_page = pager_default_initialize(count($results_list), $per_page);
+      // Split your list into page sized chunks
+  $chunks = array_chunk($results_list, $per_page, TRUE);
+
+  $pp = theme('pager', array('quantity', count($results_list)));
+
+  // Initialise the pager
+
+  // Split your list into page sized chunks
+  $chunks = array_chunk($results_list, $per_page, TRUE);
+  $nodes = node_load_multiple($chunks[$current_page]);
+  $nodes = node_view_multiple($nodes);
+
+  if (!$pp or !isset($_GET['page']) or strpos($pp,'page='.$_GET['page']) or strpos($pp, '>'.($_GET['page'] + 1).'<'))
+  $out .= render($nodes);
+  $out .= $oute;
+  $out .= $pp;
+  return $out;
+}
+function _wish_related_wishes_list($search_keyword,$offset,$limit){
+  $nid = isset($_REQUEST['wish_id']) ? $_REQUEST['wish_id'] : arg(1);
+  $search_keyword_array = explode("+", urlencode($search_keyword));
+    $search_keyword_array = array_values(array_unique($search_keyword_array));
+
+    $results_query = "SELECT
+    ff.entity_id AS entity_id,
+    ff.body_value AS body_value,
+    ff.totaltermFrequency AS termFrequency,
+    ff.wordCount AS wordCount,
+    ff.created AS created,
+    ff.totaltermFrequency * LOG(wordCount / ff.totaltermFrequency, 2) AS tfidf
+    FROM (
+      SELECT
+        bf.entity_id, bf.body_value,(";
+
+    foreach ($search_keyword_array as $key => $value) {
+        $results_query.= "ROUND((LENGTH(bf.body_value) - LENGTH(REPLACE(lower(bf.body_value), lower('".$value."'), ''))) / LENGTH('".$value."'))  ";
+
+        if($key != (count($search_keyword_array)-1)){
+           $results_query.= " + ";
+        }
+    }
+
+    $results_query.= ") AS totaltermFrequency, LENGTH(bf.body_value) - LENGTH(REPLACE(bf.body_value, ' ', '')) + 1 AS wordCount, n.created FROM field_data_body bf
+      LEFT JOIN field_data_field_category1 cat ON cat.entity_id = bf.entity_id
+      LEFT JOIN taxonomy_term_data maincat ON maincat.tid = cat.field_category1_tid
+      LEFT JOIN taxonomy_term_hierarchy hr ON hr.tid = maincat.tid
+      LEFT JOIN taxonomy_term_data subcat ON subcat.tid = hr.parent
+      LEFT JOIN field_data_field_color_list col ON (col.entity_id = bf.entity_id AND col.bundle='pin')
+      LEFT JOIN taxonomy_term_data color ON col.field_color_list_tid = color.tid
+      LEFT JOIN field_data_field_brand brand ON (brand.entity_id = bf.entity_id AND brand.bundle='pin')
+      LEFT JOIN taxonomy_term_data brand_term ON brand_term.tid = brand.field_brand_tid
+      JOIN field_data_field_parent_nid parent_nid ON (bf.entity_id = parent_nid.entity_id AND parent_nid.field_parent_nid_value=0)
+      JOIN node n
+      WHERE (";
+    foreach ($search_keyword_array as $key => $value) {
+      if (!in_array($value, ['man', 'men', 'woman', 'women']) ) {
+        $value = '%' . $value . '%';
+      }
+      $results_query.= " (bf.body_value LIKE '".$value."') ";
+      if($key < (count($search_keyword_array)-1)){
+        $results_query.= " OR ";
+      }
+    }
+
+    $results_query.= ") AND (bf.bundle='pin')
+        AND n.nid = bf.entity_id AND n.nid!=".$nid.") ff ORDER BY tfidf DESC, created DESC ";
+
+    if(!empty($offset) && !empty($limit)){
+      $results_query.=" LIMIT ". $offset.",".$limit;
+    }
+    //echo $results_query;exit;
+    $search_results = db_query($results_query);
+    $records = $search_results->fetchAll();
+    $search_results_list = array();
+    $i=0;
+    foreach ($records as $record) {
+      $search_results_list[$i] = $record->entity_id;
+      $i++;
+    }
+    return $search_results_list;
+}
+
+function _wish_detail_relevant_articles(){
+  $nid = arg(1);
+  $node = node_load($nid);
+  if($node->type == 'blog'){
+    //$tags_text = $node->field_tag_blog['und'][0]['entity']->name;
+    $blog_tags = $node->field_tag_blog['und'];
+    $tags_text = '';
+    foreach ($blog_tags as $tags => $value) {
+      $tags_text.=$tags_text." ".$value['entity']->name;
+    }
+  }else {
+    $tags_text = $node->body['und'][0]['value'];
+  }
+  if(!empty($tags_text)){
+    $tags_text = str_replace(['_'], [' '], $tags_text);
+
+    $tags = _extract_common_words($tags_text);
+    //print_r($tags);
+
+    $keywords = implode("+",$tags);
+    module_load_include('inc', 'wishary_search', 'resources/wishary_search_resource');
+    $blogs_list = _blogs_search_lists($keywords,0,5);
+    //echo "<pre>";print_r(arg(0));exit;
+    if($node->type == 'blog'){
+      jcarousel_add('related-articles', array('horizontal' => TRUE));
+    }
+    $output = theme('related_articles_blogs', array('search_blogs'=>$blogs_list));
+  } else {
+    $output = "Relevant blogs are not available";
+  }
+  return $output;
+}
+
+/**
+ * Function to validate comments
+ */
+function wishary_pin_comment_form_validate($form, &$form_state){
+  $lang = $form['field_suggestion_source']['#language'];
+  $blocking_urls = array('www.swishlist.in');
+  $suggestion_url = $form_state['values']['field_suggestion_source'][$lang][0]['url'];
+  $parse_posted_url = parse_url($suggestion_url);
+  $posted_url = $parse_posted_url['host'];
+  if(in_array($posted_url,$blocking_urls)){
+    $url_count = db_select('field_data_field_suggestion_source', 'sugg_source')
+    ->fields('sugg_source', array('entity_id'))
+    ->condition('sugg_source.field_suggestion_source_url', '%' . db_like($posted_url) . '%', 'LIKE')
+    ->execute()->rowCount();
+    if($url_count>=5){
+      form_set_error('field_suggestion_source', 'It seems the website you are trying to add a recommendation from has not yet partnered with us. If you are associated with this website and are interested in partnering with us, please contact us at partners@wishary.com and we will get in touch with you.');
+    }
+  }
+}
+
+function _wish_detail_relevant_articlesp() {
+  //$nid = $_REQUEST['wish_id'];
+  $nid = arg(1);
+  $node = node_load($nid);
+  if($node->type == 'blog'){
+    $tags_text = $node->field_tag_blog['und'][0]['entity']->name;
+  }else {
+    $tags_text = $node->body['und'][0]['value'];
+  }
+  if(!empty($tags_text)){
+    $tags_text = str_replace(['_'], [' '], $tags_text);
+
+    $tags = _extract_common_words($tags_text);
+    //print_r($tags);
+
+    $keywords = implode("+",$tags);
+    module_load_include('inc', 'wishary_search', 'resources/wishary_search_resource');
+    $blogs_list = _blogs_search_lists($keywords);
+    $limit = 10;
+    $page = pager_default_initialize(count($blogs_list), $limit);
+    $offset = $limit * $page;
+    $output = theme('all_related_articles_blogs', array('search_blogs'=>array_slice($blogs_list, $offset, $limit)));
+    $output.= theme('pager');
+  } else {
+    $output = "Relevant blogs are not available";
+  }
+  return $output;
+}
+
+function wishary_pin_flag_flag($flag, $entity_id, $account, $flagging) {
+  //$message = $account->name . " started following you!";
+  $message = "You're getting popular! ".$account->name." just followed you.";
+  _add_notification($entity_id, $message, $account->uid,'follow',$account->uid,'activity','user_followed');
+}
+
+
+function wishary_pin_flag_unflag($flag, $entity_id, $account, $flagging) {
+  $and = db_and()->condition('received_uid',$entity_id)->condition('sent_uid',$account->uid)->condition('entity_type','follow');
+  db_delete('content_notification')
+  ->condition($and)
+  ->execute();
+}
+
+/**
+ * Implements hook_node_delete
+ */
+function wishary_pin_node_delete($node) {
+  $nid = $node->nid;
+  db_delete('ars_tracking')
+  ->condition('entity_id',$nid,'=')
+  ->execute();
+}

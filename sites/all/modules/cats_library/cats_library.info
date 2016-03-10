@@ -1,0 +1,7 @@
+name = Cats Library
+description = Helper For Theme Pin Board
+core = 7.x
+
+
+version = "7.x-1.0"
+core = "7.x"

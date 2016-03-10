@@ -1,0 +1,294 @@
+<?php
+
+/**
+ * @file
+ *
+ * Comment goodness provides newest to oldest comment sorting
+ *
+ * This module extends the sort_comments module by blackice78
+ * @see http://drupal.org/project/sort_comments
+ */
+
+/**
+ *  Constants
+ */
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Provide additional comment configurations on the content type edit form.
+ */
+
+
+/**
+ * Custom submit handler for node_type_form: clears fields cache if needed.
+ */
+
+
+/**
+ * Implements hook_query_TAG_alter().
+ *
+ * Alter comments query to order by DESC as well as the default ASC.
+ *
+ * The default ASC ordering of threaded comments looks like this
+ * where 1 is older than 2.
+ *
+ * 1
+ * 1.1
+ * 1.1.1
+ * 1.2
+ * 2
+ * 2.1
+ * 2.1.1
+ * 2.1.2
+ * 2.2
+ *
+ * DESC ordering of threaded comments (newest to oldest) should look like this.
+ *
+ * 2
+ * 2.2
+ * 2.1
+ * 2.1.2
+ * 2.1.1
+ * 1
+ * 1.2
+ * 1.1
+ * 1.1.1
+ *
+ */
+
+
+/**
+ * Options callback: get available date types with human readable labels.
+ *
+ * @return array
+ *   date type => date type title (example date)
+ */
+
+
+/**
+ * Implements hook_menu().
+ */
+function comment_goodness_menu() {
+  $items = array();
+  $items['comment/%comment/delete-own'] = array(
+    'title' => 'Delete',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('comment_goodness_confirm_delete', 1),
+    'access callback' => 'comment_goodness_delete_comment_access',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+    'weight' => 2,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ *
+ * Override the comment_permalink function. The comment module assumes ASC order
+ * and because of this, permalinks do not work with DESC sorted comments.
+ */
+function comment_goodness_menu_alter(&$items) {
+  if (isset($items['comment/%'])) {
+    $items['comment/%']['page callback'] = 'comment_goodness_permalink';
+  }
+}
+
+/**
+ * Implements hook_theme_registry_alter().
+ *
+ * Override the core comment-wrapper and comment template with the template in
+ * this module.
+ */
+
+
+/**
+ * Implements hook_permission().
+ */
+function comment_goodness_permission() {
+  return array(
+    'delete own comments' => array(
+      'title' => t('Delete own suggestions'),
+      'description' => t('Allows a user to delete own suggestions that have no replies (e.g. all if in flat mode).'),
+    ),
+  );
+}
+
+/**
+ * Access callback for deleting own comment.
+ */
+function comment_goodness_delete_comment_access($comment) {
+  global $user;
+
+  $access = ($user->uid && $user->uid == $comment->uid && $comment->status == COMMENT_PUBLISHED && (user_access('delete own comments') || user_access('administer comments')));
+  // Deletion is not allowed if any comment has this comment as a parent.
+  return $access && (0 == db_query("SELECT COUNT(cid) FROM {comment} WHERE pid = :cid", array(':cid' => $comment->cid))->fetchField());
+}
+
+/**
+ * Implements hook_comment_view().
+ */
+function comment_goodness_comment_view($comment, $view_mode, $langcode) {
+  // We only need to add the delete link if it's not there.
+  if (!isset($comment->content['links']['comment']['#links']['comment-delete']) && comment_goodness_delete_comment_access($comment)) {
+    $comment->content['links']['comment']['#links']['comment-delete'] = array(
+      'title' => t('delete'),
+      'href' => "comment/$comment->cid/delete-own",
+      'html' => TRUE,
+    );
+  }
+
+  $node = node_load($comment->nid);
+
+  if (variable_get('comment_expose_fields_' . $node->type, FALSE)) {
+    $account = user_load($comment->uid);
+
+    $uri = entity_uri('comment', $comment);
+    $uri['options'] += array('attributes' => array('class' => 'permalink', 'rel' => 'bookmark'));
+
+    if (variable_get('comment_subject_field_' . $node->type, 1) == 1) {
+      if (!isset($comment->content['subject'])) {
+        $comment->content['subject'] = array(
+          '#type' => 'link',
+          '#title' => $comment->subject,
+          '#href' => $uri['path'],
+          '#options' => $uri['options'],
+        );
+      }
+    }
+
+    if (!isset($comment->content['author'])) {
+      $comment->content['author'] = array(
+        '#type' => 'item',
+        '#theme' => 'username',
+        '#account' => $account,
+      );
+    }
+
+    if (variable_get('user_signatures', 1) == 1 && !isset($comment->content['signature'])) {
+      $comment->content['signature'] = array(
+        '#type' => 'item',
+        '#markup' => !empty($comment->signature_format) ? check_markup($comment->signature, $comment->signature_format, $langcode) : check_plain($comment->signature),
+      );
+    }
+
+    if (theme_get_setting('toggle_comment_user_picture') && !isset($comment->content['picture'])) {
+      $comment->content['picture'] = array(
+        '#type' => 'item',
+        '#theme' => 'user_picture',
+        '#account' => $account,
+      );
+    }
+
+    if (!isset($comment->content['created'])) {
+      $comment->content['created'] = array(
+        '#type' => 'item',
+        '#markup' => format_date($comment->created, variable_get('comment_created_date_format_' . $node->type, 'medium')),
+      );
+    }
+
+    if (!isset($comment->content['changed'])) {
+      $comment->content['changed'] = array(
+        '#type' => 'item',
+        '#markup' => format_date($comment->created, variable_get('comment_changed_date_format_' . $node->type, 'medium')),
+      );
+    }
+
+    if (!isset($comment->content['new'])) {
+      $comment->content['new'] = array(
+        '#type' => 'item',
+        '#markup' => !empty($comment->new) ? t('new') : '',
+      );
+    }
+
+    if (!isset($comment->content['permalink'])) {
+      $comment->content['permalink'] = array(
+        '#type' => 'link',
+        '#title' => t('Permalink'),
+        '#href' => $uri['path'],
+        '#options' => $uri['options'],
+      );
+    }
+
+    if (!isset($comment->content['submitted'])) {
+      $date_type = variable_get('comment_created_date_format_' . $node->type, 'medium');
+      $submitted_string = _comment_goodness_get_submitted_string($date_type);
+      $comment->content['submitted'] = array(
+        '#type' => 'item',
+        '#markup' => t($submitted_string, array(
+          '!username' => theme('username', array('account' => $account)),
+          '!datetime' => format_date($comment->created, $date_type),
+        )),
+      );
+    }
+  }
+}
+
+/**
+ * Confirm form for deleting own comment.
+ *
+ * We can't use the core comment_confirm_delete() because it talks about
+ * deleting replies, and also mollom hooks into that form which is not
+ * appropriate for end-users.
+ */
+function comment_goodness_confirm_delete($form, &$form_state, $comment) {
+  $form['#comment'] = $comment;
+  // Always provide entity id in the same form key as in the entity edit form.
+  $form['cid'] = array(
+    '#type' => 'value',
+    '#value' => $comment->cid,
+  );
+  return confirm_form(
+    $form,
+    t('Are you sure you want to delete the suggestion %title?', array('%title' => $comment->subject)),
+    'node/' . $comment->nid,
+    t('This action cannot be undone.'),
+    t('Delete'),
+    t('Cancel'),
+    'comment_goodness_confirm_delete');
+}
+
+/**
+ * Form submit function copied from comment_confirm_delete_submit().
+ *
+ * The user-visible and watchdog messages are different from core.
+ */
+function comment_goodness_confirm_delete_submit($form, &$form_state) {
+  global $user;
+
+  $comment = $form['#comment'];
+  // Delete the comment and its replies.
+  comment_delete($comment->cid);
+  drupal_set_message(t('The suggestion has been deleted.'));
+  watchdog('content', 'User %name (@uid) deleted own suggestion @cid.', array('%name' => $user->name, '@uid' => $user->uid, '@cid' => $comment->cid));
+  // Clear the cache so an anonymous user sees that his comment was deleted.
+  cache_clear_all();
+
+  $form_state['redirect'] = "node/$comment->nid";
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * When a new comment is submitted, the core comment module calculates that new
+ * comment's position in the list of comments and then provides a redirect URL
+ * to the new comment on the subsequent page load. Because the comment module
+ * assumes ASC sort ordering, the redirect URL for paged comments is incorrect
+ * when the comments are DESC sort ordered. So this module overrides much of the
+ * core comment module code for calculating the position of a new comment in the
+ * paged list of DESC sorted comments.
+ *
+ * The overriding starts with adding an additional new comment form submit
+ * handler.
+ *
+ * Disabling the submit actions while the comment body is empty also happens
+ * here.
+ */
+
+
+/**
+ * Helper function to disable the form submit actions while the comment body is
+ * empty.
+ */

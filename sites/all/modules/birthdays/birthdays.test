@@ -1,0 +1,183 @@
+<?php
+
+/**
+ * @file
+ * Unit tests for the Birthdays module.
+ */
+
+/**
+ * Unit tests for the BirthdaysBirthday class.
+ */
+class BirthdaysBirthdayTestCase extends DrupalUnitTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('BirthdaysBirthday unit tests'),
+      'description' => t('Unit tests for the BirthdaysBirthday class.'),
+      'group' => t('Birthdays'),
+    );
+  }
+
+  public function setUp() {
+    parent::setUp();
+    module_load_include('inc', 'birthdays', 'birthdays_birthday');
+  }
+
+  /**
+   * Tests empty values.
+   */
+  public function testFromEmpty() {
+    $this->assertEqual(BirthdaysBirthday::fromEmpty()->toArray(), array('year' => 0, 'month' => 0, 'day' => 0));
+    $this->assertIdentical(BirthdaysBirthday::fromEmpty()->toString(), '');
+    $this->assertIdentical(BirthdaysBirthday::fromEmpty()->toUnixtime(), NULL);
+    $this->assertIdentical(BirthdaysBirthday::fromEmpty()->isEmpty(), TRUE);
+  }
+
+  /**
+   * Tests age calculation.
+   */
+  public function testAgeCalculation() {
+    // Assume it's 02/24/2012.
+    $now = mktime(3, 54, 23, 2, 24, 2012);
+    $this->assertEqual(date('m/d/Y', $now), '02/24/2012');
+
+    // Test age calculation.
+    $this->assertEqual(BirthdaysBirthday::fromArray(array('month' => 2, 'day' => 25, 'year' => 1985))->getCurrentAge($now), 26);
+    $this->assertEqual(BirthdaysBirthday::fromArray(array('month' => 2, 'day' => 16, 'year' => 1985))->getCurrentAge($now), 27);
+    $this->assertEqual(BirthdaysBirthday::fromArray(array('month' => 7, 'day' => 3, 'year' => 1993))->getCurrentAge($now), 18);
+  }
+
+  /**
+   * Tests conversion from array.
+   */
+  public function testFromArray() {
+    $this->assertIdentical(BirthdaysBirthday::fromArray(array('month' => 0, 'day' => 0))->toString(), '');
+
+    date_default_timezone_set('UTC');
+    $this->assertIdentical(BirthdaysBirthday::fromArray(array('year' => 1970, 'day' => 1, 'month' => 1))->toUnixtime(), 0);
+
+    $this->assertEqual(BirthdaysBirthday::fromArray(array('month' => 3, 'day' => 7))->toArray(), array('month' => 3, 'day' => 7, 'year' => 0));
+
+    try {
+      BirthdaysBirthday::fromArray(array('foo' => 'bar'));
+      $this->fail(t('Exception expected.'));
+    }
+    catch (InvalidArgumentException $e) {
+      $this->pass($e->getMessage());
+    }
+
+    try {
+      BirthdaysBirthday::fromArray(NULL);
+      $this->fail(t('Exception expected.'));
+    }
+    catch (InvalidArgumentException $e) {
+      $this->pass($e->getMessage());
+    }
+  }
+
+  /**
+   * Tests conversion directily given values.
+   */
+  public function testFromDate() {
+    $this->assertIdentical(BirthdaysBirthday::fromDate(0, 0, 0)->isEmpty(), TRUE);
+    $this->assertIdentical(BirthdaysBirthday::fromDate(0, 1, 1)->isEmpty(), FALSE);
+
+    try {
+      BirthdaysBirthday::fromDate(0, 2, 0);
+      $this->fail(t('Exception expected.'));
+    }
+    catch (InvalidArgumentException $e) {
+      $this->pass($e->getMessage());
+    }
+  }
+
+  /**
+   * Tests BirthdaysBirthday::isLeapYear().
+   */
+  function testLeapYear() {
+    $this->assertTrue(BirthdaysBirthday::isLeapYear(2012));
+    $this->assertTrue(BirthdaysBirthday::isLeapYear(2000));
+    $this->assertFalse(BirthdaysBirthday::isLeapYear(2001));
+  }
+}
+
+/**
+ * Tests utility functions.
+ */
+class BirthdaysUtilityTestCase extends DrupalUnitTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => t('Birthdays utility tests'),
+      'description' => t('Unit tests for various utility functions.'),
+      'group' => t('Birthdays'),
+    );
+  }
+
+  public function setUp() {
+    parent::setUp();
+    module_load_include('install', 'birthdays', 'birthdays');
+  }
+
+  /**
+   * Tests _birthdays_upgrade_tokens().
+   */
+  public function testUpgradeTokens() {
+    $this->assertEqual(_birthdays_upgrade_tokens('Happy birthday !username!'), 'Happy birthday [user:name]!');
+    $this->assertEqual(_birthdays_upgrade_tokens('[site:name] !password'), '[site:name] !password');
+    $this->assertEqual(_birthdays_upgrade_tokens('!date !uri !mailto'), '[date:medium] [site:url] [user:mail]');
+  }
+}
+
+/**
+ * Tests birthdays default functionaly.
+ */
+class BirthdaysDefaultsTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Birthdays defaults tests',
+      'description' => 'Tests birthdays with the default configuration.',
+      'group' => 'Birthdays',
+    );
+  }
+
+  private $admin_user;
+
+  private $web_user;
+
+  public function setUp() {
+    parent::setUp(array('field_ui', 'birthdays_defaults'));
+    $this->admin_user = $this->drupalCreateUser(array('administer site configuration', 'administer users'));
+    $this->web_user = $this->drupalCreateUser(array('access user profiles', 'access content'));
+  }
+
+  /**
+   * Ensure the field is visible on the configuration page.
+   */
+  public function testAdminPage() {
+    $this->drupalLogin($this->admin_user);
+    $this->drupalGet('admin/config/people/accounts/fields');
+    $this->assertText(t('Birthday'));
+    $this->assertText('birthdays');
+    $this->assertText(t('Select boxes'));
+  }
+
+  /**
+   * Ensure users can edit their birthdays.
+   */
+  public function testUserProfile() {
+    $this->drupalLogin($this->web_user);
+    $this->drupalGet('user/' . $this->web_user->uid . '/edit');
+    $this->assertText(t('Birthday'));
+
+    $edit['birthdays[und][0][year]'] = 1955;
+    $edit['birthdays[und][0][month]'] = 4;
+    $edit['birthdays[und][0][day]'] = 22;
+    $this->drupalPost(NULL, $edit, t('Save'));
+    $this->assertText(t('The changes have been saved.'));
+
+    $this->drupalGet('user/' . $this->web_user->uid);
+    $this->assertText('1955/04/22');
+  }
+}

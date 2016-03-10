@@ -1,0 +1,98 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the simplenews module
+ */
+
+/**
+ * Implements hook_schema().
+ */
+
+function newsletter_subscription_schema() {
+  $schema['newsletter_subscriber'] = array(
+    'description' => 'Subscribers to newsletter',
+    'fields' => array(
+      'snid' => array(
+        'description' => 'Primary key: Unique subscriber ID.',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'activated' => array(
+        'description' => 'Boolean indicating the status of the subscription.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'mail' => array(
+        'description' => "The subscriber's email address.",
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'first_name' => array(
+        'description' =>  "The subscriber's first name",
+        'type' => 'varchar',
+        'length' => '60',
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'last_name' => array(
+        'description' =>  "The subscriber's last name",
+        'type' => 'varchar',
+        'length' => '60',
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'uid' => array(
+        'description' => 'The {users}.uid that has the same email address.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'bounced' => array(
+        'description' => 'Boolean indicating the status of the mail bounce.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'marked_spam' => array(
+        'description' => 'Boolean indicating the user marked as spam.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'timestamp' => array(
+        'description' => 'UNIX timestamp of when the user is (un)subscribed.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'UNIX timestamp of when the subscription record was added.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'subid' => array(
+        'description' => 'Random number for user',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('snid'),
+    'indexes' => array(
+      'mail' => array('mail'),
+      'uid' => array('uid'),
+    ),
+  );
+  return $schema;
+}

@@ -1,0 +1,176 @@
+<?php
+
+/**
+ * Implementation of hook_menu()
+ */
+function guest_menu() {
+  $items['guest'] = array(
+    'title' => 'guest',
+    'type' => MENU_CALLBACK,
+    'page callback' => 'guest_callback_guest',
+     'access callback' => TRUE,
+  );
+
+
+  return $items;
+}
+
+/**
+ * Implements of hook_services_resources().
+ */
+function guest_services_resources() {
+  $api = array(
+    'guest' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieves posted blogs',
+          'callback' => '_guest_gender_retrieve',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'token',
+              'type' => 'int',
+              'description' => 'Number of latest items to get',
+              'source' => array('param' => 'token'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'gender',
+              'type' => 'int',
+              'description' => 'Posts from the last number of days',
+              'source' => array('param' => 'gender'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return
+
+$api;
+}
+
+/**
+ * Callback function for blog retrieve
+ */
+function _guest_gender_retrieve($fn, $token, $gender) {
+  // Check for mad values
+  $token = $token;
+  $gender = $gender;
+  return guest_find_blog_items($token, $gender);
+}
+
+/**
+ * Gets blog posts
+ */
+function guest_find_blog_items($token, $gender) {
+db_update('push_notifications_tokens')
+   ->condition('token', $token)
+   //->condition('gender', NULL)
+   ->fields(array(
+    	      'gender' => $gender,
+  	      ))
+  ->execute();
+
+return $token.'   '.$gender;
+
+}
+
+function guest_callback_guest($offset,$limit,$gender){
+$gender_foryou=$_REQUEST['gender'];
+$query = db_select('push_notifications_tokens', 'p');
+$query->fields('p', array('gender'));
+$query->condition('p.token',$gender_foryou);
+$result = $query->execute();
+$gen = $result->fetchObject();
+$gender = $gen->gender;
+//Condition -1 Followed wishes;
+$query = db_select('node', 'n');
+$query->fields('n', array('nid'));
+$query->condition('n.type','pin');
+if($gender == 'Male') {
+  $query->condition('n.title', '%men%', 'LIKE'); 
+  $query->condition('n.title', '%women%', 'NOT LIKE');
+  //$query->condition('n.title', '^(.)*([^o]|[^w]o)man(.)*$', 'REGEXP');
+} else if($gender == 'Female') {
+  $query->condition('n.title', '%women%', 'LIKE'); 
+  //$query->condition('n.title', '^(.)*(women)(.)*$', 'REGEXP');
+} 
+$query->distinct();
+$query->range(0, 300);
+$query->orderRandom();
+$result = $query->execute();
+$wishes = $result->fetchCol('nid');
+
+
+//condition6  Random blogs
+
+$query = db_select('node', 'n');
+$query->fields('n', array('nid'));
+$query->condition('n.type','blog');
+$query->distinct();
+$query->range(0, 300);
+$query->orderRandom();
+$result = $query->execute();
+$random_blogs = $result->fetchCol('nid');
+
+
+$wishes_i_like = $wishes;
+//$random_blogs = $random_blog;
+
+$total_random_wishes = count($wishes_i_like);
+//echo '$total_random_wishes: '.$total_random_wishes.'<br>';
+$for_you = $for_you_temp = [];
+$current = $randomNext  = $random_blog_next  = 0;
+
+do {
+  // Get 8 records from wishes I like
+  if(isset($wishes_i_like[$current])) {
+    for($i = 0; $i < 7; $i++) {
+      if(isset($wishes_i_like[$current])) {
+        $for_you_temp[] =  $wishes_i_like[$current++];
+      }
+    }
+  } else {
+    $current++;
+  }
+
+  // Get one wish from random wishes
+  $for_you_temp[] =  $random_blogs[$randomNext++];
+  
+  // Get one wish from random blog
+  /*if(isset($random_blogs[$random_blog_next])) {
+  $for_you_temp[] =  $random_blogs[$random_blog_next++]." blog";
+}*/
+
+  shuffle($for_you_temp);
+
+  $for_you = array_merge($for_you, $for_you_temp);
+
+  $for_you_temp = [];
+
+} while ($randomNext < $total_random_wishes);
+
+
+$offset=$_REQUEST['offset'];
+$limit=$_REQUEST['limit'];
+//$for_you =array_unique($for_you);
+$for_you=array_slice($for_you,$offset,$limit);
+
+    drupal_json_output($for_you);
+    exit();
+//return json_encode($for_you);
+}

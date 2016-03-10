@@ -1,0 +1,9 @@
+name = Wishary Utility
+description = Wishray Utility module
+core = 7.x
+
+
+version = "7.x-1.0"
+core = "7.x"
+datestamp = "1298364142"
+

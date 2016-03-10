@@ -1,0 +1,4 @@
+name = services_inapp
+description = Style quiz resource 
+dependencies[] = services
+core = 7.x

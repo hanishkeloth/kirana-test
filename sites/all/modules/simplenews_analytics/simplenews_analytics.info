@@ -1,0 +1,12 @@
+name = "Simplenews Analytics"
+description = "Add Google Analytics codes to URLs in simplenews newsletters."
+dependencies[] = simplenews
+package = Mail
+core = 7.x
+
+; Information added by Drupal.org packaging script on 2013-12-11
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "simplenews_analytics"
+datestamp = "1386780206"
+

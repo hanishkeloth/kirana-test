@@ -1,0 +1,16 @@
+<?php
+/**
+ * @file
+ * Request statistics for visitor and page.
+ */
+
+/**
+ * Return request statistics common code.
+ */
+function request_statistics() {
+  static $rs;
+  if (!isset($rs)) {
+    $rs = new RequestStatistics();
+  }
+  return $rs;
+}

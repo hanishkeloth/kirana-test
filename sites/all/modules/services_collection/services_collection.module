@@ -1,0 +1,141 @@
+<?php
+/**
+ * Implements of hook_services_resources().
+ */
+function services_collection_services_resources() {
+  $api = array(
+    'collectionupdate' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieves user room info',
+		  'file' => array('type' => 'inc', 'module' => 'services_collection', 'name' => 'services_collection.resource'),
+          'callback' => '_services_collection_resource_myroom',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+            array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+				 array(
+              'name' => 'bid',
+              'type' => 'int',
+              'description' => 'Board id',
+              'source' => array('param' => 'bid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+				 array(
+              'name' => 'bname',
+              'type' => 'string',
+              'description' => 'Board name',
+              'source' => array('param' => 'bname'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+        
+      ),
+    ),
+     'collectiondelete' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieves user room info',
+		  'file' => array('type' => 'inc', 'module' => 'services_collection', 'name' => 'services_collection.resource'),
+          'callback' => '_services_collectiond_resource_myroom',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '3',
+				),
+            array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+				 array(
+              'name' => 'bid',
+              'type' => 'int',
+              'description' => 'Board id',
+              'source' => array('param' => 'bid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+				 array(
+              'name' => 'bname',
+              'type' => 'string',
+              'description' => 'Board name',
+              'source' => array('param' => 'bname'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+        
+      ),
+    ),
+
+	
+	
+  );
+  return $api;
+}
+
+
+function _collection_blog_retrieve() {
+
+  /*global $user;
+ $bid = 9;
+   if (isset($bid) and $bid) {
+    db_update('pinboard_boards')
+      ->condition('bid', $bid)
+      ->fields(array(
+    	  'uid' => 1,
+    	  'name' => 'monehanishe',
+    	  'data' => ''
+  	  ))
+      ->execute();
+    drupal_set_message('success');
+    $bid = $bid;
+    $bp = new stdClass;
+    $bp->bid = $bid;
+    $bp->uid = 1;
+    $bp->name = 'monehanishe';
+    $bp->username = 'admin';
+    pinboard_helper_pathauto_update_alias($bp, 'update');
+    }*/
+    return "hello word";
+    }
+    /**
+ * Callback function for blog retrieve
+ */
+function _MYMODULE_blog_retrieve($bid, $uid) {
+  // Check for mad values
+  $nitems = intval($nitems);
+  $timestamp = intval($timestamp);
+  return ($bid);
+}

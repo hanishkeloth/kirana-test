@@ -1,0 +1,80 @@
+<?php
+
+function pdm_admin_menu() {
+  $items = array();
+
+  $items['admin/config/user-interface/pdm-admin'] = array(
+    'title' => t('Persistent dismissable messages'),
+    'description' => t('Manage settings for the PDM module.'),
+    'access arguments' => array('administer pdms'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('pdm_admin_settings'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  $items['admin/content/pdm'] = array(
+    'title' => t('PDMs'),
+    'description' => t('Create persistent dismissable messages to be shown to users'),
+    'access arguments' => array('create pdms'),
+    'page callback' => 'pdm_admin_messages',
+    'type' => MENU_LOCAL_TASK | MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+function pdm_admin_permissions() {
+  return array(
+    'administer pdms' => array(
+      'title' => t('Administer PDM settings'),
+      'description' => t('Administer archival and other settings for the PDM module'),
+    ),
+    'create pdms' => array(
+      'title' => t('Create PDM messages'),
+      'description' => t('Grants permission to create PDMs that display for all, or specific site users'),
+    ),
+  );
+}
+
+function pdm_admin_messages() {
+
+  // Load up all the messages that were administratively defined
+  $msgs = pdm_admin_load_messages();
+
+  // Create our rows of messages
+
+  // Output them with edit/manage links
+  // Edit, force dismiss, force resurrect
+}
+
+function pdm_admin_settings() {
+  $form = array();
+
+  $form['pdm_archive_pdms'] = array(
+    '#title' => t('Archive PDMs when dismissed.'),
+    '#description' => t('When a PDM (which cannot be resurrected by an un-expire event) is dismissed it is normally deleted. This option puts in into an archive table so it can be viewed later by a user.'),
+    '#type' => 'checkbox',
+    '#default_value' => variable_get('pdm_archive_pdms', FALSE),
+  );
+  $form['pdm_archive_dsms'] = array(
+    '#title' => t('Archive DSMs'),
+    '#description' => t('Archive all DSM (regular Drupal status messages) messages for each user. This will not archive for anonymous. Be certain that you do not have errors displaying on screen or this archive could get very large, very quickly.'),
+    '#type' => 'checkbox',
+    '#default_value' => variable_get('pdm_archive_dsms', FALSE),
+  );
+  $form['pdm_dsm_persist'] = array(
+    '#title' => t('Make DSMs persist'),
+    '#description' => t('Cause all DSMs (regular Drupal status messages) to persist until dismissed. This will make every DSM message that appears to a non-anonymous user persist until they actively dismiss it.'),
+    '#type' => 'checkbox',
+    '#default_value' => variable_get('pdm_dsm_persist', FALSE),
+  );
+
+  return system_settings_form($form);
+}
+
+function pdm_admin_load_messages() {
+  $query = db_select('pdm_content_messages', 'm');
+  $ret = $query->execute()->fetchAll();
+
+  return $ret;
+}

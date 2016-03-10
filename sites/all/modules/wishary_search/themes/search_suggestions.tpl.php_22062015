@@ -1,0 +1,25 @@
+<?php
+  $search_keyword_array = explode(" ", arg(1));
+  if(!empty($suggestions)) {
+    $suggestions_array = array_udiff($suggestions, $search_keyword_array, 'strcasecmp');
+    if(!empty($suggestions_array)) {
+?>
+      <div id="search-opt-container" class="hashtag-products-container">
+          <div class="hashtag-products">
+              <ul class="hashtag-wrapper jcarousel-skin-default">
+                  <?php
+                      foreach($suggestions_array as $suggestion_name) {
+                  ?>
+                      <li class="hashtag-item">
+                          <a href="javascript:"><?php if(isset($suggestion_name)){ print $suggestion_name; }?></a>
+                      </li>
+                  <?php
+                      }
+                  ?>
+              </ul>
+          </div>
+      </div>
+<?php
+
+    }
+} ?>

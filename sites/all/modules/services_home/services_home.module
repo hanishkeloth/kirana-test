@@ -1,0 +1,110 @@
+<?php
+/**
+* Implements of hook_services_resources().
+*/
+function services_home_services_resources() {
+    $resource = array(
+        'services_home' => array(
+            'operations' => array(
+                'retrieve' => array(
+                    'help' => 'Creating node clone',
+                    'callback' => '_services_home_resource_retrieve',
+                    'args' => array(
+                        array(
+                            'name' => 'tids',
+                            'optional' => FALSE,
+                            'source' => array('path' => '0'),
+                            'type' => 'int',
+                            'description' => 'The nid of the node to get',
+                        ),
+                    ),
+                    'access arguments' => array('access content'),
+                ),
+               
+            ),
+        ),
+         'services_hashtags' => array(
+            'operations' => array(
+           'retrieve' => array(
+          'help' => 'Retrieves user room info',
+		  //'file' => array('type' => 'inc', 'module' => 'services_userinfo', 'name' => 'services_userinfo.resource'),
+          'callback' => '_services_home_resource_hastag',
+          'access callback' => 'user_access',
+          'access arguments' => array('access content'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            
+            array(
+              'name' => 'uid',
+              'type' => 'int',
+              'description' => 'User Id of the User',
+              'source' => array('param' => 'uid'),
+              'optional' => TRUE,
+              'default' => '0',
+				),
+			),
+        ),
+      ),
+        ),
+    );
+    return $resource;
+}
+
+function _services_home_resource_retrieve($tids) {
+ global $user;
+
+  $user = user_load($user->uid); // Make sure the user object is fully loaded
+   $uid =$user->uid;
+   $query = db_select('fboauth_users', 'u');
+  $query->innerjoin('fboauth_friends', 'f', 'f.fbid = u.fbid');
+  $query->fields('u', array('uid'))
+        ->condition('f.uid',$uid,'=');
+ $result = $query->execute();
+ //$record = $result->fetchAssoc();
+  $foobarbanglador = '';
+  while ($record = $result->fetchAssoc()) {
+    //$foobarbanglador[] = $record;
+$foobarbanglador[] = $record['uid'];
+$uids = 2177;
+$flag = flag_get_flag('follow');
+$flag->flag('flag',  $record['uid'], user_load($uid), TRUE);
+  }
+$result = db_query_range('SELECT field_gender_profile_value FROM {field_revision_field_gender_profile} WHERE entity_id= :uid',0,20,
+                          array(':uid' => $uid))->fetchField();
+ //foreach ($result as $record) {
+  //  $cids[] = $record->cid;
+ /// }
+ $gender = $result;
+if ($gender == false) {
+ $tids = array(54,73);
+ $genders = taxonomy_term_load_multiple($tids);
+}
+
+ if (trim($gender) == 'Male'){
+ $tids = array(1149,1200,1203,1215,1216,1229,1239,1242,1460,1461,1479,1504,1539,1540,1541,1544,1545,1574,1619,1735,1791,2113,2120,2122,2126,2133,2137,2141,2142,2149);
+ $terms = taxonomy_term_load_multiple($tids);
+ }else if (trim($gender) == 'Female'){
+  $tids = array(1135,1146,1200,1229,1242,1332,1456,1502,1504,1508,1541,1542,1568,1578,1791,1834,1935,1972,2118,2119,2121,2125,2128,2129,2130,2132,2136,2142,2206,2266);
+ $terms = taxonomy_term_load_multiple($tids);
+}else if (trim($gender) == 'Unisex'){
+ $tids = array(1135,1146,1200,1215,1229,1239,1242,1332,1456,1460,1461,1479,1502,1504,1508,1539,1541,1544,1568,1574,1619,1735,1791,1972,2121,2122,2128,2130,2141,2142);
+ $terms = taxonomy_term_load_multiple($tids);
+}else{
+ $tids = array(1135,1146,1200,1215,1229,1239,1242,1332,1456,1460,1461,1479,1502,1504,1508,1539,1541,1544,1568,1574,1619,1735,1791,1972,2121,2122,2128,2130,2141,2142);
+ $terms = taxonomy_term_load_multiple($tids);
+}
+$return->gender=$genders;
+ $return->hashtags= $terms;
+ return $return;
+
+}
+function _services_home_resource_hastag($uid) {
+  // Check for mad values
+  $uid = intval($uid);
+  return services_home_find_hashtag_items($uid);
+}
+function services_home_find_hashtag_items($uid) {
+   $uid = intval($uid);
+  $user = user_load($user->uid);
+  return $uid;
+  }

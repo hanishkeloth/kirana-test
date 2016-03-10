@@ -1,0 +1,416 @@
+<?php
+/**
+* Implementing hook_menu
+*/
+function push_notification_menu(){
+    $items = array();
+    $items['admin/config/push_notification'] = array(
+      'title' => t('Push Notifications configuration section'),
+      'description' => 'Push Notifications configurations',
+      'position' => 'left',
+      'weight' => -100,
+      'page callback' => 'system_admin_menu_block_page',
+      'access arguments' => array('administer site configuration'),
+      'file' => 'system.admin.inc',
+      'file path' => drupal_get_path('module', 'system'),
+    );
+	$items['admin/config/push_notification/list'] = array(
+     'title' => t('Push Notifications'),
+     'description' => t('Push Notifications'),
+     'page callback' => '_get_all_system_notifications',
+     'access arguments' => array('administer site configuration'),
+    );
+	$items['admin/push_notification/add'] = array(
+	 'title' => t('Create Push Notifications'),
+     'description' => t('Create Push Notifications'),
+     'page callback' => 'drupal_get_form',
+     'access arguments' => array('administer site configuration'),
+	 'page arguments' => array('push_notification_form'),
+	 'type' => MENU_LOCAL_TASK,
+	);
+	$items['admin/push_notification/edit/%'] = array(
+	 'title' => t('Create Push Notifications'),
+     'description' => t('Create Push Notifications'),
+     'page callback' => 'drupal_get_form',
+     'access arguments' => array('administer site configuration'),
+	 'page arguments' => array('push_notification_form',3),
+	);
+	$items['admin/push_notification/%/delete'] = array(
+     'title' => 'Delete',
+     'page callback' => 'drupal_get_form',
+     'page arguments' => array('notification_delete', 2),
+     'access arguments' => array('administer site configuration'),
+     'type' => MENU_CALLBACK,
+    );
+
+	$items['system_notifications/all'] = array(
+        'title' => 'System Notifications',
+        'description' => 'Link to My notifications',
+        'page callback' => '_system_notifications_list',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_LOCAL_TASK,
+    );
+  $items['system_notifications/push'] = array(
+      'title' => 'System Notifications',
+      'description' => 'Link to My notifications',
+      'page callback' => '_send_system_push_notifications',
+      'access arguments' => array('administer site configuration'),
+      'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/notifications_tracking'] = array(
+    'title' => t('Sent Push Notifications Tracking'),
+    'description' => t('Sent Push Notifications Tracking'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('notification_tracking'),
+    'access arguments' => array('administer site configuration'),
+  );
+
+	return $items;
+}
+
+function _get_all_system_notifications(){
+	$output = l('Add push notification','admin/push_notification/add');
+	$header = array('Message','Link','Start Date','End Date','Operations','');
+	$query = db_select('system_notification','sn')
+        ->fields('sn', array('notification_id','message','link','start_date','end_date'))
+		->orderBy('notification_id', 'DESC');
+    $result = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+    $rows = array();
+
+    foreach($result as $record){
+	    $start_date_array = getDate($record['start_date']);
+		$end_date_array = getDate($record['end_date']);
+        $rows[] = array($record['message'],
+							 $record['link'],
+							 $start_date_array['mon'].'/'.$start_date_array['mday'].'/'.$start_date_array['year'],
+							 $end_date_array['mon'].'/'.$end_date_array['mday'].'/'.$end_date_array['year'],
+							 l('edit','admin/push_notification/edit/'.$record['notification_id']),
+							 l('delete', 'admin/push_notification/'.$record['notification_id'].'/delete'),
+		);
+    }
+	$output.= theme('table', array('header' => $header,
+                  	         'rows' => $rows ));
+   return $output;
+}
+
+function push_notification_form($form, &$form_state){
+	$startDateArray = array();
+	$endDateArray = array();
+	if(arg(2) == 'edit' && is_numeric(arg(3))){
+	  $notification = _get_push_notification(arg(3));
+	  if (isset($notification->start_date)){
+		$startdateValue = getDate($notification->start_date);
+		$startDateArray = array('month' => $startdateValue['mon'],
+                       'day'   => $startdateValue['mday'],
+                       'year'  => $startdateValue['year']);
+	  } else {
+		$startDateArray = array();
+	  }
+	  if (isset($notification->end_date)){
+		$enddateValue = getDate($notification->end_date);
+		$endDateArray = array('month' => $enddateValue['mon'],
+                       'day'   => $enddateValue['mday'],
+                       'year'  => $enddateValue['year']);
+	  } else {
+		$endDateArray = array();
+	  }
+	  $form['notification_id'] = array(
+		'#type' => 'hidden',
+		'#default_value' => $notification->notification_id,
+	  );
+	}
+	$form['message'] = array (
+	 '#title' => t('Message'),
+	 '#type' => 'textarea',
+	 '#required' => TRUE,
+	 '#default_value' => isset($notification->message) ? $notification->message : '',
+	);
+	$form['link'] = array (
+	 '#title' => t('Link'),
+	 '#type' => 'textfield',
+	 '#required' => TRUE,
+	 '#default_value' => isset($notification->link) ? $notification->link : '',
+	);
+	$form['date'] = array(
+	 '#type' => 'fieldset',
+	 '#title' => t('Validity Date'),
+	 '#collapsible' => FALSE,
+     '#collapsed' => FALSE,
+	);
+	$form['date']['start_date'] = array (
+	 '#title' => t('Start Date'),
+	 '#type' => 'date',
+	 '#required' => TRUE,
+	  '#default_value' => $startDateArray,
+	 '#date_format' => 'm-d-Y',
+	);
+	$form['date']['end_date'] = array (
+	 '#title' => t('End Date'),
+	 '#type' => 'date',
+	 '#required' => TRUE,
+	 '#default_value' => $endDateArray,
+	);
+	$form['submit'] = array (
+	 '#type' => 'submit',
+	 '#value' => t('Save'),
+	 '#validate' => array('push_notification_form_validate'),
+	 '#submit' => array('push_notification_form_submit'),
+	);
+	$form['actions']['cancel'] = array(
+      '#markup' => l(t('Cancel'), 'admin/config/push_notification/list'),
+      '#weight' => 20,
+    );
+	return $form;
+}
+function push_notification_form_validate($form, &$form_state) {
+	$start_date = strtotime(date($form_state['values']['start_date']['year'].'-'.$form_state['values']['start_date']['month'].'-'.$form_state['values']['start_date']['day']));
+	$end_date = strtotime(date($form_state['values']['end_date']['year'].'-'.$form_state['values']['end_date']['month'].'-'.$form_state['values']['end_date']['day']));
+	if($start_date > $end_date){
+		form_set_error('start_date','Start date should not be greater than end date');
+	}
+}
+function push_notification_form_submit($form, &$form_state) {
+  module_load_include('module', 'content_notification', 'content_notification');
+	global $user;
+	$message = $form_state['values']['message'];
+	$link = $form_state['values']['link'];
+	$start_date = strtotime(date($form_state['values']['start_date']['year'].'-'.$form_state['values']['start_date']['month'].'-'.$form_state['values']['start_date']['day']));
+	$end_date = strtotime(date($form_state['values']['end_date']['year'].'-'.$form_state['values']['end_date']['month'].'-'.$form_state['values']['end_date']['day']));
+	if(isset($form_state['values']['notification_id'])){
+		$notification_id = $form_state['values']['notification_id'];
+		$result = db_update('system_notification')
+			->fields(array(
+				'message' => $message,
+				'link' => $link,
+				'start_date' => $start_date,
+				'end_date' => $end_date,
+			))
+			->condition('notification_id', $notification_id, '=')
+            ->execute();
+	}else{
+	  $notification_id = db_insert('system_notification')
+		->fields(array(
+			'message' => $message,
+			'link' => $link,
+			'start_date' => $start_date,
+			'end_date' => $end_date,
+		))
+		->execute();
+		_add_notification(0, '', $notification_id, 'push_notification',$user->uid,'system');
+	}
+		drupal_set_message('Push Notification updated successfully');
+}
+
+function _get_push_notification($notification_id) {
+	$query = db_select('system_notification', 'sn')
+		->fields('sn',array('notification_id','message','link','start_date','end_date'))
+		->condition('sn.notification_id',$notification_id);
+	$result = $query->execute()->fetchAll();
+	if(!empty($result)){
+		return $result[0];
+	}else{
+		return NULL;
+	}
+}
+
+function notification_delete($form, &$form_state, $notification) {
+	$form = array();
+	$form['notification_id'] = array(
+		'#type' => 'value',
+		'#value' => $notification,
+	);
+	return confirm_form($form,
+		t('Are you sure you want to delete this notification?'),
+		'admin/config/push_notification/list',
+		t('This action cannot be undone.'),
+		t('Delete'),
+		t('Cancel')
+	);
+	return $form;
+}
+
+/**
+ * submit handler for the notification_delete
+ * this function is invoked only when the user clicks confirm button
+ * clickin on cancel, the user goes back to the $path
+ */
+function notification_delete_submit($form, &$form_state) {
+	if (isset($form_state['values']['notification_id'])) {
+		$notification_id = $form_state['values']['notification_id'];
+		$delete_result = db_delete('system_notification')
+						->condition('notification_id',$notification_id)
+						->execute();
+	}
+	drupal_set_message('Notification deleted successfully');
+	$form_state['redirect'] = 'admin/config/push_notification/list';
+}
+
+function _system_notifications_list(){
+	$todays_date = strtotime(date('Y-m-d'));
+	global $user;
+	$result = db_query("select sn.* from system_notification sn where notification_id not in (select notification_id from system_notification_read where uid=$user->uid)
+			  AND (start_date <= $todays_date AND end_date >= $todays_date) ORDER BY sn.notification_id DESC");
+	$push_notifications = array();
+	foreach($result as $record){
+		$push_notifications[] = $record;
+	}
+	return $push_notifications;
+}
+
+/**
+ * Send System notifications as Push notifications to mobile app
+ */
+function _send_system_push_notifications() {
+  $todays_date = strtotime(date('Y-m-d'));
+  global $user;
+  $result = db_query("select sn.* from system_notification sn where start_date <= $todays_date AND end_date >= $todays_date AND push_notifications_sent=0 Limit 0,1");
+  $push_notifications = array();
+  foreach($result as $record){
+    $push_notifications[] = $record;
+  }
+  if(!empty($push_notifications)){
+    $content_url = '';
+    $nid = '';
+    $search_keyword = '';
+    $path = preg_replace('/\//','',parse_url($push_notifications[0]->link,PHP_URL_PATH),1);
+    $url = explode("/", $path);
+    if(!empty($url)){
+      if($url[0] == 'search_results'){
+        $search_keyword = str_replace("+"," ",$url[1]);
+      } else {
+        $org_path = drupal_lookup_path("source", $path);
+        if(!empty($org_path)){
+          $node = menu_get_object("node", 1, $org_path);
+          if($node->type=='article' || $node->type=='blog'){
+            $content_url = $push_notifications[0]->link;
+          } else {
+            $nid = $node->nid;
+          }
+        } else {
+          $content_url = $push_notifications[0]->link;
+        }
+      }
+      module_load_include('module', 'push_notifications', 'push_notifications');
+      $payload = array('alert' => $push_notifications[0]->message);
+
+      $tokens_ios = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS);
+      if (!empty($tokens_ios)) {
+        $payload_apns = array('aps' => $payload);
+        if(!empty($nid)){
+          $payload_apns['nid'] = $nid;
+        }
+        if(!empty($content_url)){
+          $payload_apns['url'] = $content_url;
+        }
+        if(!empty($search_keyword)){
+          $payload_apns['search'] = $search_keyword;
+        }
+
+        $payload_apns['ntype'] = 'admin_notification';
+        $result = push_notifications_apns_send_message($tokens_ios, $payload_apns);
+        $dsm_type = ($result['success']) ? 'status' : 'error';
+        drupal_set_message($result['message'], $dsm_type);
+        if($result['success']){
+          $ios_users = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS,FALSE,TRUE);
+          foreach ($android_users as $ios) {
+            db_insert("notifications_events_tracking")
+            ->fields(array(
+              'event_date' => strtotime(date('Y-m-d')),
+              'event_category' => 'Sent_Notification',
+              'event_action' => 'admin_notification',
+              'event_value' => $ios['uid'],
+              'device_type' => 'ios',
+            ))->execute();
+          }
+        }
+      }
+
+      $tokens_android = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID);
+      if (!empty($tokens_android)) {
+        if(!empty($nid)){
+          $payload['nid'] = $nid;
+        }
+        if(!empty($content_url)){
+          $payload['url'] = $content_url;
+        }
+        if(!empty($search_keyword)){
+          $payload['search'] = $search_keyword;
+        }
+        $payload['ntype'] = 'admin_notification';
+        // Determine which method to use for Google push notifications.
+        switch (PUSH_NOTIFICATIONS_GOOGLE_TYPE) {
+          case PUSH_NOTIFICATIONS_GOOGLE_TYPE_C2DM:
+           $result = push_notifications_c2dm_send_message($tokens_android, $payload);
+          break;
+
+          case PUSH_NOTIFICATIONS_GOOGLE_TYPE_GCM:
+           $result = push_notifications_gcm_send_message($tokens_android, $payload);
+          break;
+        }
+        /*$dsm_type = ($result['success']) ? 'status' : 'error';
+        drupal_set_message($result['message'], $dsm_type);*/
+        if($result['success']){
+          $android_users = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID,FALSE,TRUE);
+          foreach ($android_users as $android) {
+            db_insert("notifications_events_tracking")
+            ->fields(array(
+              'event_date' => strtotime(date('Y-m-d')),
+              'event_category' => 'Sent_Notification',
+              'event_action' => 'admin_notification',
+              'event_value' => $android['uid'],
+              'device_type' => 'android',
+            ))->execute();
+          }
+        }
+      }
+      db_update('system_notification')
+      ->fields(array('push_notifications_sent' => 1))
+      ->condition('notification_id',$push_notifications[0]->notification_id)
+      ->execute();
+    }
+  }
+}
+
+
+function notification_tracking($form,$form_state) {
+  $form = array();
+
+  $form['start_date'] = array(
+    '#type' => 'date_popup',
+    '#title' => t('Start Date'),
+    '#date_format' => 'd/m/Y',
+    '#default_value' => date('Y-m-d'),
+  );
+  $form['end_date'] = array(
+    '#type' => 'date_popup',
+    '#title' => t('End Date'),
+    '#date_format' => 'd/m/Y',
+    '#default_value' => date('Y-m-d'),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => "Submit"
+  );
+  return $form;
+}
+
+function notification_tracking_submit($form,$form_state){
+  echo "<pre>";print_r($form_state['values']);
+  $start_date = strtotime(date($form_state['values']['start_date']));
+  echo "start_date=".$start_date."<br>";
+  $end_date = strtotime(date($form_state['values']['end_date']));
+  echo "end_date=".$end_date;
+  $track_list = _get_tracking_list($start_date,$end_date);
+  echo "<pre>";print_r($track_list);
+  exit;
+}
+
+function _get_tracking_list($start_date, $end_date) {
+  $track_list = db_select('notifications_events_tracking','evnts_track')
+    ->fields('evnts_track',array('event_date','event_category','event_action','event_value','device_type'))
+    ->condition('evnts_track.event_date',$start_date,'>=')
+    ->condition('evnts_track.event_date',$end_date,'<=')
+    ->execute();
+    return $track_list;
+
+}

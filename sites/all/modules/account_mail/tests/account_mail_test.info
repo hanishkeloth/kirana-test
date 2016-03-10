@@ -1,0 +1,13 @@
+name = "Account mail module tests"
+description = "Support module for account-mail related testing."
+package = Testing
+core = 7.x
+dependencies[] = account_mail
+;hidden = TRUE
+
+; Information added by drupal.org packaging script on 2013-09-30
+version = "7.x-1.x-dev"
+core = "7.x"
+project = "account_mail"
+datestamp = "1380552274"
+

@@ -1,0 +1,323 @@
+<?php
+
+/**
+ * @file
+ * jQuery Tabs Field module allows you to create jQuery tabs field.
+ */
+
+/**
+ * Implements hook_field_info().
+ */
+function field_jquery_tabs_field_info() {
+  return array(
+    'field_jquery_tabs' => array(
+      'label' => t('jQuery Tabs Field'),
+      'description' => t('jQuery Tabs Field.'),
+      'default_widget' => 'field_jquery_tabs_widget',
+      'default_formatter' => 'field_jquery_tabs_default',
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function field_jquery_tabs_field_widget_info() {
+  return array(
+    'field_jquery_tabs_widget' => array(
+      'label' => t('jQuery Tabs'),
+      'field types' => array('field_jquery_tabs'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function field_jquery_tabs_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $base = $element;
+  $settings = $instance['settings'];
+  $element += array(
+    '#type' => 'fieldset',
+    '#tree' => TRUE,
+    '#title' => isset($instance['label']) ? $instance['label'] : NULL,
+    '#description' => isset($instance['description']) ? $instance['description'] : NULL,
+    '#prefix' => '<div id="jquery-tabs-wrapper">',
+    '#suffix' => '</div>',
+  );
+
+  $field_name = $field['field_name'];
+
+  $field_data = array(
+    'field_name' => $field_name,
+    'langcode' => $langcode,
+    'delta' => $delta,
+  );
+
+  $form_state['jquery_tabs']['field_data'] = $field_data;
+
+  // Build the fieldset with the proper number of names. We'll use
+  // $form_state['num_names'] to determine the number of textfields to build.
+  if (empty($form_state['num_names'])) {
+    if (isset($items[$delta])) {
+      $form_state['num_names'] = _field_jquery_tabs_entered_tab_count($items[$delta]);
+    }
+    else {
+      $form_state['num_names'] = 1;
+    }
+  }
+
+  for ($i = 1; $i <= $form_state['num_names']; $i++) {
+    $element['tab_title_' . $i] = array(
+      '#type' => 'textfield',
+      '#title' => t('Tab @value Title', array('@value' => $i)),
+      '#size' => 50,
+      '#maxlength' => 50,
+      '#description' => t('Enter title for the Tab @value', array('@value' => $i)),
+      '#required' => ($delta == 0 && $instance['required'] && $i == 1) ? TRUE : FALSE,
+      '#default_value' => isset($items[$delta]['tab_title_' . $i]) ? $items[$delta]['tab_title_' . $i] : NULL,
+    );
+    $element['tab_body_' . $i] = array(
+      '#type' => 'textarea',
+      '#title' => t('Tab @value Body', array('@value' => $i)),
+      '#cols' => 60,
+      '#rows' => 5,
+      '#description' => t('Enter body for the Tab @value', array('@value' => $i)),
+      '#default_value' => isset($items[$delta]['tab_body_' . $i]) ? $items[$delta]['tab_body_' . $i] : NULL,
+    );
+  }
+  if ($form_state['num_names'] < 7) {
+    $element['add_jquery_tab'] = array(
+      '#type' => 'submit',
+      '#value' => t('Add one more'),
+      '#submit' => array('_field_jquery_tabs_add_more_add_one'),
+      '#ajax' => array(
+        'callback' => '_field_jquery_tabs_add_more_callback',
+        'wrapper' => 'jquery-tabs-wrapper',
+      ),
+    );
+  }
+  if ($form_state['num_names'] > 1) {
+    $element['remove_jquery_tab'] = array(
+      '#type' => 'submit',
+      '#value' => t('Remove one'),
+      '#submit' => array('_field_jquery_tabs_add_more_remove_one'),
+      '#ajax' => array(
+        'callback' => '_field_jquery_tabs_add_more_callback',
+        'wrapper' => 'jquery-tabs-wrapper',
+      ),
+    );
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_settings_form().
+ */
+function field_jquery_tabs_field_widget_settings_form($field, $instance) {
+  $widget = $instance['widget'];
+  $settings = $widget['settings'];
+  $formats = filter_formats();
+  $format_ids = array();
+  foreach ($formats as $format) {
+    $format_ids[$format->format] = $format->name;
+  }
+
+  $form['format_id'] = array(
+    '#type' => 'select',
+    '#title' => t('Tab Body Text Format'),
+    '#description' => t('Select the default text format for tab body.'),
+    '#default_value' => isset($settings['format_id']) ? $settings['format_id'] : NULL,
+    '#required' => TRUE,
+    '#options' => $format_ids,
+  );
+
+  return $form;
+}
+
+/**
+ * Callback for getting number of opened tabs in form.
+ */
+function _field_jquery_tabs_entered_tab_count($item) {
+  $count = 1;
+  if (isset($item['tab_title_1']) && isset($item['tab_title_2']) &&
+      isset($item['tab_title_3']) && isset($item['tab_title_4']) &&
+      isset($item['tab_title_5']) && isset($item['tab_title_6']) &&
+      isset($item['tab_title_7'])) {
+    $count = 7;
+  }
+  elseif (isset($item['tab_title_1']) && isset($item['tab_title_2']) &&
+      isset($item['tab_title_3']) && isset($item['tab_title_4']) &&
+      isset($item['tab_title_5']) && isset($item['tab_title_6'])) {
+    $count = 6;
+  }
+  elseif (isset($item['tab_title_1']) && isset($item['tab_title_2']) &&
+      isset($item['tab_title_3']) && isset($item['tab_title_4']) &&
+      isset($item['tab_title_5'])) {
+    $count = 5;
+  }
+  elseif (isset($item['tab_title_1']) && isset($item['tab_title_2']) &&
+      isset($item['tab_title_3']) && isset($item['tab_title_4'])) {
+    $count = 4;
+  }
+  elseif (isset($item['tab_title_1']) && isset($item['tab_title_2']) &&
+      isset($item['tab_title_3'])) {
+    $count = 3;
+  }
+  elseif (isset($item['tab_title_1']) && isset($item['tab_title_2'])) {
+    $count = 2;
+  }
+  return $count;
+}
+
+/**
+ * Callback for both ajax-enabled buttons.
+ *
+ * Selects and returns the fieldset with the names in it.
+ */
+function _field_jquery_tabs_add_more_callback($form, $form_state) {
+  $field_name = $form_state['jquery_tabs']['field_data']['field_name'];
+  $delta = $form_state['jquery_tabs']['field_data']['delta'];
+  $langcode = $form_state['jquery_tabs']['field_data']['langcode'];
+  return $form[$field_name][$langcode][$delta];
+}
+
+/**
+ * Submit handler for the "add-one-more" button.
+ *
+ * Increments the max counter and causes a rebuild.
+ */
+function _field_jquery_tabs_add_more_add_one($form, &$form_state) {
+  $form_state['num_names']++;
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Implements hook_field_is_empty().
+ */
+function field_jquery_tabs_field_is_empty($item, $field) {
+
+  return empty($item['tab_title_1']) && empty($item['tab_body_1']);
+}
+
+/**
+ * Submit handler for the "remove one" button.
+ *
+ * Decrements the max counter and causes a form rebuild.
+ */
+function _field_jquery_tabs_add_more_remove_one($form, &$form_state) {
+  if ($form_state['num_names'] > 1) {
+    $form_state['num_names']--;
+  }
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Implements hook_field_validate().
+ */
+function field_jquery_tabs_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
+  foreach ($items as $delta => $value) {
+    _field_jquery_tabs_validate($items[$delta], $delta, $field, $entity, $instance, $langcode);
+  }
+}
+
+/**
+ * Callback function for validate.
+ */
+function _field_jquery_tabs_validate(&$item, $delta, $field, $node, $instance, $langcode) {
+
+  for ($i = 2; $i <= 7; $i++) {
+    if (isset($item['tab_body_' . $i])) {
+      if (!empty($item['tab_body_' . $i])) {
+        if (empty($item['tab_title_' . $i])) {
+          form_set_error($field['field_name'] . '][' . $langcode . '][' . $delta . '][tab_title_' . $i, t('Tab @value Title is manadatory if you choose to enter text in Tab 2 body', array('@value' => $i)));
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function field_jquery_tabs_field_formatter_info() {
+  return array(
+    'field_jquery_tabs_default' => array(
+      'label' => t('jQuery Tabs'),
+      'field types' => array('field_jquery_tabs'),
+      'multiple values' => FIELD_BEHAVIOR_DEFAULT,
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function field_jquery_tabs_theme() {
+  return array(
+    'field_jquery_tabs_wrapper' => array(
+      'variables' => array(),
+      'template' => 'templates/field-jquery-tabs-wrapper',
+    ),
+    'field_jquery_tabs_list' => array(
+      'variables' => array(),
+      'template' => 'templates/field-jquery-tabs-lists',
+    ),
+    'field_jquery_tabs_body' => array(
+      'variables' => array(),
+      'template' => 'templates/field-jquery-tabs-body',
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function field_jquery_tabs_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+
+  switch ($display['type']) {
+    case 'field_jquery_tabs_default':
+      drupal_add_library('system', 'ui.tabs');
+      $tabs_list = '';
+      $tabs_body = '';
+      foreach ($items as $delta => $item) {
+        for ($i = 1; $i <= 7; $i++) {
+          if (!empty($item['tab_title_' . $i])) {
+            $tabs_list .= theme('field_jquery_tabs_list', array(
+              'delta' => $delta,
+              'tab_title' => check_plain($item['tab_title_' . $i]),
+              'counter' => $i,
+                )
+            );
+
+            $tabs_body .= theme('field_jquery_tabs_body', array(
+              'delta' => $delta,
+              'tab_body' => check_markup($item['tab_body_' . $i], isset($instance['widget']['settings']['format_id']) ?
+                      $instance['widget']['settings']['format_id'] : NULL, $langcode),
+              'counter' => $i,
+                )
+            );
+          }
+        }
+        $js = ' jQuery( "#tabs-' . $delta . '" ).tabs();';
+
+        drupal_add_js('jQuery(document).ready(function () { ' . $js . ' });', array(
+          'type' => 'inline',
+          'scope' => 'header',
+            )
+        );
+        $output = theme('field_jquery_tabs_wrapper', array(
+          'tabs_list' => $tabs_list,
+          'tabs_body' => $tabs_body,
+          'delta' => $delta,
+            )
+        );
+        $element[$delta]['#markup'] = $output;
+      }
+
+      break;
+  }
+  return $element;
+}

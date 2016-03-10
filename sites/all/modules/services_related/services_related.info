@@ -1,0 +1,5 @@
+name = wishary Wish Related
+description = Wish recommendation for expression
+package = Services
+core = 7.x
+dependencies[] = services

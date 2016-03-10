@@ -1,0 +1,116 @@
+<?php
+/**
+ * @file
+ * Install & uninstall functions for User notification module.
+ */
+
+/**
+ * Implementation of hook_uninstall.
+ */
+
+function content_notification_schema(){
+    $schema['content_notification'] = array(
+        'description' => 'Notifications of content',
+        'fields' => array(
+            'notify_id' => array(
+                'description' => 'The primary identifier for a notification.',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'received_uid' => array(
+                'description' => 'User received notification',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'sent_uid' => array(
+              'description' => 'User sent notification',
+              'type' => 'int',
+              'unsigned' => TRUE,
+              'not null' => TRUE,
+            ),
+            'entity_id' => array(
+                'description' => 'Cloned Node Id',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => FALSE,
+            ),
+            'read_status' => array(
+                'description' => 'Notification read status',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => FALSE,
+                'default' => 0,
+            ),
+            'created' => array(
+              'type' => 'int',
+              'not null' => TRUE,
+              'default' => 0,
+              'description' => 'The time that the notification was created, as a Unix timestamp.',
+            ),
+            'noty_message' => array(
+              'type' => 'text',
+              'not null' => TRUE,
+              'description' => 'Message.',
+            ),
+            'entity_type' => array(
+              'type' => 'varchar',
+              'length' => 32,
+              'not null' => TRUE,
+              'description' => 'Type of content (node,recommendations)',
+            ),
+			'notification_type' => array(
+              'type' => 'varchar',
+              'length' => 32,
+              'not null' => TRUE,
+              'description' => 'Type of notification (system,activity)',
+            ),
+        ),
+        'primary key' => array('notify_id'),
+    );
+	
+	$schema['notification_settings'] = array(
+        'description' => 'Notification settings',
+        'fields' => array(
+            'setting_id' => array(
+                'description' => 'The primary identifier for a notification settings.',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'uid' => array(
+                'description' => 'User Id',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+			'email_notification' => array(
+                'description' => 'Email Notification setting',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+			'sound_notification' => array(
+                'description' => 'Sound Notification setting',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+		),
+		'primary key' => array('setting_id'),
+	);
+    return $schema;
+}
+
+function content_notification_install(){
+	_notification_mail_variables_set();
+}
+
+function _notification_mail_variables_set(){
+	variable_set('notification_mail_subject',t('Notification from wishary'));
+	variable_set('notification_mail_body',t('Dear [user:name],
+			You have received the notification in wishary
+			[content:message]			
+			--  [site:name] team'));
+}

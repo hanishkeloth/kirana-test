@@ -1,0 +1,295 @@
+<?php
+
+/**
+* Implementing hook_menu
+*/
+function wish_utility_menu(){
+    $items['wish/publish'] = array(
+     'title' => 'Publish nodes',
+     //'description' => "Cloning the pin content",
+     'page callback' => 'wish_utility_publish',
+     //'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => 'user_is_logged_in',
+     'weight' => 10,
+    );
+    $items['wish/follow'] = array(
+     'title' => 'Publish follow',
+     //'description' => "Cloning the pin content",
+     'page callback' => 'wish_utility_follow',
+     //'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => TRUE,
+     'weight' => 10,
+    );
+     $items['wish/follow_hour'] = array(
+     'title' => 'Publish follow',
+     //'description' => "Cloning the pin content",
+     'page callback' => 'wish_utility_follow_hour',
+     //'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => TRUE,
+     'weight' => 10,
+    );
+      $items['wish/follow_week_day'] = array(
+     'title' => 'Publish follow',
+     //'description' => "Cloning the pin content",
+     'page callback' => 'wish_utility_follow_day',
+     //'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => TRUE,
+     'weight' => 10,
+    );
+      $items['wish/follow_day'] = array(
+     'title' => 'Publish follow',
+     //'description' => "Cloning the pin content",
+     'page callback' => 'wish_utility_follow_week',
+     //'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => TRUE,
+     'weight' => 10,
+    );
+       $items['wish/wish_likes'] = array(
+     'title' => 'Publish follow',
+     //'description' => "Cloning the pin content",
+     'page callback' => 'wish_utility_likes',
+     //'page arguments' => array('wishary_pin_clone_form',2),
+     'access callback' => TRUE,
+     'weight' => 10,
+    );
+  return $items;
+}
+
+function wish_utility_publish() {
+$nids = array(95988,95989,95990,95991,95992,95993,95994,95995,95996,95997,95998,95999,96000,96001,96002,96003,96004,96005,96006,96007,96008,96009,96010,96011,96012,96013,96014,96015,96016,96017,96018,96019,96020,96021,96022,96023,96024,96025,96026,96027,96028,96029,96030,96031,96032,96033,96034,96035,96036,96037,96038,96039,96040,96041,96042,96043,96044,96045,96046,96047,96049,96048,96050,96051,96052,96053,96054,96055,96056,96057,96058,96059,96060,96061,96062,96063,96064,96065,96066,96067,96068,96069,96070,96071,96072,96073,96074,96075,96076,96077,96078,96079,96080,96081,96082,96083,96084,96085,96086,96087,96088,96089,96090,96091,96092,96093,96094,96095,96096,96097,96098,96099,96100,96101,96102,96103,96104,96105,96107,96106,96108,96109,96110,96111,96112,96113,96114,96115,96116,96117,96118,96120,96119,96122,96121,96123,96124,96125,96126,96127,96128,96129,96130,96131,96132,96134,96133,96135,96136,96137,96138,96139,96140,96141,96142,96143,96144,96145,96146,96147,96148,96149,96150,96151,96152,96153,96154,96155,96156,96157,96158,96159,96160,96161,96162,96163,96164,96165,96166,96167,96168,96169,96170,96171,96172,96173,96174,96175,96176,96177,96178,96179,96180,96181,96182,96183,96184,96185,96186,96187,96188,96189,96190,96191,96192,96193,96194,96195,96196,96197,96198,96199,96200,96201,96202,96203,96204,96205,96206,96207,96208,96209,96210,96211,96212,96214,96213,96215,96216,96217,96218,96219,96220,96221,96222,96223,96224,96225,96226,96227,96228,96229,96230,96231,96232,96233,96234,96235,96237,96236,96238,96239,96240,96241,96242,96243,96244,96245,96246,96247,96248,96249,96250,96251,96252,96253,96254,96255,96257,96256,96258,96259,96260,96261,96262,96263,96264,96265,96266,96267,96268,96269,96270,96271,96272,96273,96274,96275,96276,96277,96278,96279,96280,96281,96282,96283,96284,96285,96286,96287,96288,96289,96290,96291,96292,96293,96294,96295,96296,96297,96298,96299,96300,96301,96302,96303,96304,96305,96306,96307,96308,96309,96310,96311,96312,96314,96313,96316,96315,96317,96319,96318,96320,96321,96322,96323,96324,96325,96326,96327,96328,96329,96330,96331,96332,96333,96334,96335,96336,96337,96338,96339,96340,96341,96342,96343,96344,96345,96346,96347,96348,96349,96350,96351,96352,96353,96354,96355,96356,96357,96358,96359,96360,96361,96362,96363,96364,96365,96366,96367,96368,96369,96370,96371,96372,96373,96374,96375,96376,96377,96378,96379,96380,96381,96382,96383,96384,96385,96386,96387,96388,96390,96389,96391,96392,96393,96394,96395,96396,96397,96398,96399,96400,96401,96402,96403,96404,96405,96406,96407,96408,96409,96410,96411,96412,96413,96414,96415,96416,96417,96418,96419,96420,96421,96422,96423,96424,96425,96426,96427,96428,96430,96429,96431,96432,96433,96434,96435,96436,96437,96438,96439,96440,96441,96442,96443,96444,96445,96446,96447,96448,96449,96450,96451,96452,96453,96454,96455,96456,96457,96458,96460,96459,96461,96462,96463,96464,96465,96466,96467,96469,96468,96470,96471,96472,96473,96474,96475,96476,96477,96478,96479,96480,96481,96482,96483,96484,96485,96486,96487,96489,96488,96490,96491,96492,96493,96494,96495,96496,96497,96498,96499,96500,96501,96502,96503,96504,96505,96506,96507,96509,96508,96510,96511,96512,96513,96515,96514,96516,96517,96518,96519,96521,96520,96522,96523,96524,96525,96526,96527,96528,96529,96531,96530,96532,96533,96534,96535,96537,96536,96538,96539,96540,96541,96542,96543,96544,96545,96546,96547,96548,96549,96550,96551,96552,96553,96554,96555,96556,96557,96558,96559,96560,96561,96562,96563,96564,96565,96566,96567,96568,96569,96570,96571,96572,96574,96573,96575,96576,96577,96578,96579,96580,96581,96582,96583,96584,96585,96586,96587,96588,96589,96590,96591,96592,96593,96594,96595,96596,96597,96598,96599,96600,96601,96602,96603,96604,96605,96606,96607,96608,96609,96610,96611,96612,96613,96614,96615,96616,96617,96618,96619,96620,96621,96622,96623,96624,96625,96626,96627,96628,96629,96630,96631,96632,96633,96634,96635,96636,96637,96638,101183,101184,101185,101186,101187,101188,101189,101190,101191,101194,101195,101196,101197);
+
+// Load all nodes in one go for better performance.
+$nodes = node_load_multiple($nids);
+foreach ($nodes as $node) {
+  // set status property to 1
+  $node->status = 1;
+  // re-save the node
+  node_save($node);
+}
+}
+
+function wish_utility_follow(){
+$maleUids = [7650,7653,8869,9029,8564,8560,8549,8493,8577,8586];
+$femaleUids = [8550,8743,8748,8754,8506,8509,8529,8531,8532,8575,8588];
+$totalUsers = array_merge($maleUids,$femaleUids);
+$start_time = REQUEST_TIME - 1800;//30minutes
+$endtime = REQUEST_TIME ;// now
+/*$user3 = user_load(1751); // Make sure the user object is fully loaded
+$uid3 =$user1->uid;
+$user4 = user_load(1); // Make sure the user object is fully loaded
+$uid4 =$user2->uid;*/
+$query = db_select('users', 'u');
+$query->fields('u', array('uid'));
+//$query->condition('created', REQUEST_TIME - 36000, '>');
+$query->condition('created', array($start_time, $endtime), 'BETWEEN');
+$result = $query->execute();
+//$record = $result->fetchall();
+//echo $start_time;
+//print_r($record);
+//exit();
+ if ($result) {
+    while ($row = $result->fetchAssoc()) {
+    $user_full = user_load($row['uid']);
+    $gender = $user_full->field_gender_profile['und']['0']['value'];
+
+    if($gender == 'Female') {
+     
+            $uid2 = $femaleUids[array_rand($femaleUids)];
+        
+    $flag = flag_get_flag('follow');
+    $flag->flag('flag',  $row['uid'], user_load($uid2), TRUE);
+    
+   } else if($gender == 'Male') {
+     
+         $uid1 = $totalUsers[array_rand($totalUsers)];
+        
+    $flag = flag_get_flag('follow');    
+    $flag->flag('flag',  $row['uid'], user_load($uid1), TRUE);
+  
+  }
+    
+}
+  
+}
+  
+return "success";
+}
+ 
+function wish_utility_follow_hour(){
+$maleUids = [7650,7653,8869,9029,8564,8560,8549,8493,8577,8586];
+$femaleUids = [8550,8743,8748,8754,8506,8509,8529,8531,8532,8575,8588];
+$start_time = REQUEST_TIME - 32400;// 9chours
+$endtime = REQUEST_TIME - 28800; // 8 Hours
+$query = db_select('users', 'u');
+$query->fields('u', array('uid'));
+//$query->condition('created', REQUEST_TIME - 36000, '>');
+$query->condition('created', array($start_time, $endtime), 'BETWEEN');
+$result = $query->execute();
+//$record = $result->fetchall();
+//echo $start_time;
+//print_r($record);
+//exit();
+  if ($result) {
+    while ($row = $result->fetchAssoc()) {
+    $user_full = user_load($row['uid']);
+    $gender = $user_full->field_gender_profile['und']['0']['value'];
+
+    if($gender == 'Female') {
+     
+            $uid2 = $femaleUids[array_rand($femaleUids)];
+        
+    $flag = flag_get_flag('follow');
+    $flag->flag('flag',  $row['uid'], user_load($uid2), TRUE);
+    
+   } else if($gender == 'Male') {
+     
+         $uid1 = $totalUsers[array_rand($totalUsers)];
+        
+    $flag = flag_get_flag('follow');    
+    $flag->flag('flag',  $row['uid'], user_load($uid1), TRUE);
+  
+  }
+    
+}
+  
+}
+return "success";
+
+
+ }
+ 
+function wish_utility_follow_day(){
+$maleUids = [7650,7653,8869,9029,8564,8560,8549,8493,8577,8586];
+$femaleUids = [8550,8743,8748,8754,8506,8509,8529,8531,8532,8575,8588];
+$start_time = REQUEST_TIME - 864000;// 10days
+$endtime = REQUEST_TIME; // 1day
+$query = db_select('users', 'u');
+$query->fields('u', array('uid'));
+//$query->condition('created', REQUEST_TIME - 36000, '>');
+$query->condition('created', array($start_time, $endtime), 'BETWEEN');
+$result = $query->execute();
+//$record = $result->fetchall();
+//echo $start_time;
+//print_r($record);
+//exit();
+ if ($result) {
+    while ($row = $result->fetchAssoc()) {
+    $user_full = user_load($row['uid']);
+    $gender = $user_full->field_gender_profile['und']['0']['value'];
+
+    if($gender == 'Female') {
+     
+            $uid2 = $femaleUids[array_rand($femaleUids)];
+        
+    $flag = flag_get_flag('follow');
+    $flag->flag('flag',  $row['uid'], user_load($uid2), TRUE);
+    
+   } else if($gender == 'Male') {
+     
+         $uid1 = $totalUsers[array_rand($totalUsers)];
+        
+    $flag = flag_get_flag('follow');    
+    $flag->flag('flag',  $row['uid'], user_load($uid1), TRUE);
+  
+  }
+    
+}
+  
+}
+return "success";
+
+
+ }
+
+function wish_utility_follow_week(){
+$maleUids = [7650,7653,8869,9029,8564,8560,8549,8493,8577,8586];
+$femaleUids = [8550,8743,8748,8754,8506,8509,8529,8531,8532,8575,8588];
+$start_time = REQUEST_TIME - 86400;// 24days
+$endtime = REQUEST_TIME - 864000; // 10day
+$query = db_select('users', 'u');
+$query->fields('u', array('uid'));
+//$query->condition('created', REQUEST_TIME - 36000, '>');
+$query->condition('created', array($start_time, $endtime), 'BETWEEN');
+$result = $query->execute();
+//$record = $result->fetchall();
+//echo $start_time;
+//print_r($record);
+//exit();
+ if ($result) {
+    while ($row = $result->fetchAssoc()) {
+    $user_full = user_load($row['uid']);
+    $gender = $user_full->field_gender_profile['und']['0']['value'];
+
+    if($gender == 'Female') {
+     
+            $uid2 = $femaleUids[array_rand($femaleUids)];
+        
+    $flag = flag_get_flag('follow');
+    $flag->flag('flag',  $row['uid'], user_load($uid2), TRUE);
+    
+   } else if($gender == 'Male') {
+     
+         $uid1 = $totalUsers[array_rand($totalUsers)];
+        
+    $flag = flag_get_flag('follow');    
+    $flag->flag('flag',  $row['uid'], user_load($uid1), TRUE);
+  
+  }
+    
+}
+  
+}
+return "success";
+
+
+ }
+ 
+function wish_utility_node_insert($node) {
+    $system_path = 'http://www.wishary.in/node/'.$node->nid;
+    $nid = $node->nid;
+    $node_uid = $node->uid;
+    $author = $node->name;
+    $current_path = drupal_get_path_alias($system_path);
+     $my_node = node_load($nid);
+     if ($node_uid != 1){
+         $values['subject'] = "New wishes";
+         $values['message'] =  $system_path;
+         $values['category']['category'] = $author;
+         $to = 'hanishkeloth@icloud.com,hanishkleloth1256@gmail.com';
+         $from = 'cs@wishary.com';
+        drupal_mail('contact', 'page_mail', $to, language_default(), $values);
+
+ }
+}
+
+function wish_utility_likes(){
+
+$maleUids = [7650,7653,8869,9029,8564,8560,8549,8493,8577,8586];
+$femaleUids = [8550,8743,8748,8754,8506,8509,8529,8531,8532,8575,8588];
+$start_time = REQUEST_TIME - 14400;// 4Hours
+$endtime = REQUEST_TIME ; // 
+/*$query = db_select('node', 'n');
+$query->fields('n', array('nid'));
+$query->fields('n', array('uid'));
+//$query->condition('created', REQUEST_TIME - 36000, '>');
+$query->condition('created', array($start_time, $endtime), 'BETWEEN');
+$result = $query->execute();
+//$record = $result->fetchall();
+//echo $start_time;
+//print_r($record);
+//exit();
+*/
+
+$us = db_select('node')->fields('node', array('nid'))->fields('node', array('uid'))->condition('created', array($start_time, $endtime), 'BETWEEN')->execute();
+while ($row = $us->fetchAssoc()) {
+     $vote['entity_id'] = 113859;
+     $vote['value_type'] = 'points';
+      $vote['uid'] = 1751;
+     $vote['value'] = '1';
+     votingapi_set_votes($vote);
+    }
+
+
+return "success";
+ }
+ 

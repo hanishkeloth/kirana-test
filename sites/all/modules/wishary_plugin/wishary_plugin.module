@@ -1,0 +1,36 @@
+<?php
+/********CKEditor plugins********/
+function wishary_plugin_ckeditor_plugin()
+{
+    $module_path = drupal_get_path('module', 'wishary_plugin');
+    $plugins     = array();
+ 
+    $plugins['MediaEmbed'] = array(
+        'name'    => 'MediaEmbed',
+        'desc'    => t('wishary.com: CKEditor: MediaEmbed'),
+        'path'    => $module_path . '/ckeditor-plugins/MediaEmbed/',
+        'default' => 't',
+        'buttons' => array(
+            'leaflet' => array(
+                'label' => 'Leaflet Map',
+                'icon'  => 'images/icon.gif',
+            ),
+        ),
+    );
+ 
+    $plugins['oembed'] = array(
+        'name'    => 'oembed',
+        'desc'    => t('wishary.com: CKEditor: oembed plugin'),
+        'path'    => $module_path . '/ckeditor-plugins/oembed/',
+        'default' => 't'
+    );
+ 
+    $plugins['youtube'] = array(
+        'name'    => 'youtube',
+        'desc'    => t('wishary.com: CKEditor: youtube plugin'),
+        'path'    => $module_path . '/ckeditor-plugins/youtube/',
+        'default' => 't'
+    );
+ 
+    return $plugins;
+}

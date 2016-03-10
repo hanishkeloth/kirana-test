@@ -1,0 +1,14 @@
+<div class="search-results-list pin_page">
+<?php
+if(!empty($wishary_search_results)){
+    foreach($wishary_search_results as $search_result){
+        $node = node_load($search_result);
+        $view = node_view($node, 'teaser');
+        $rendered = drupal_render($view);
+        print $rendered;
+    }
+}else{
+    echo "No Search Results found";
+}
+?>
+</div>

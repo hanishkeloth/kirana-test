@@ -1,0 +1,50 @@
+<?php
+/**
+ * @file
+ * Install & uninstall functions for Node_Clone module.
+ */
+
+/**
+ * Implementation of hook_uninstall.
+ */
+
+function wishary_pin_schema(){
+  $schema['featured_recommendations'] = array(
+	'description' => 'User Picked Recommendation',
+	'fields' => array(
+		'feature_id' => array(
+			'description' => 'The primary identifier for a User Picked Recommendation.',
+			'type' => 'serial',
+			'unsigned' => TRUE,
+			'not null' => TRUE,
+		),
+		'cid' => array(
+			'description' => 'Comment Id',
+			'type' => 'int',
+			'unsigned' => TRUE,
+			'not null' => TRUE,
+		),
+		'nid' => array(
+			'description' => 'Node Id',
+			'type' => 'int',
+			'unsigned' => TRUE,
+			'not null' => TRUE,
+		),
+	),
+	'primary key' => array('feature_id'),
+  );
+  return $schema;
+}
+
+/**
+* hook_update to create new table featured_recommendations
+*
+**/
+function wishary_pin_update_7000(){
+  $schema = wishary_pin_schema();
+  if (!db_table_exists('featured_recommendations')) {
+    db_create_table('featured_recommendations', $schema['featured_recommendations']);
+    return t('featured_recommendations table is created');
+  }
+
+}

@@ -1,0 +1,1483 @@
+<?php
+/**
+* Implementing hook_menu
+*/
+function push_notification_menu(){
+    $items = array();
+    $items['admin/config/push_notification'] = array(
+      'title' => t('Push Notifications configuration section'),
+      'description' => 'Push Notifications configurations',
+      'position' => 'left',
+      'weight' => -100,
+      'page callback' => 'system_admin_menu_block_page',
+      'access arguments' => array('Add push notifications'),
+      'file' => 'system.admin.inc',
+      'file path' => drupal_get_path('module', 'system'),
+    );
+	$items['admin/config/push_notification/list'] = array(
+     'title' => t('Push Notifications'),
+     'description' => t('Push Notifications'),
+     'page callback' => '_get_all_system_notifications',
+     'access arguments' => array('Add push notifications'),
+    );
+	$items['admin/push_notification/add'] = array(
+	 'title' => t('Create Push Notifications'),
+     'description' => t('Create Push Notifications'),
+     'page callback' => 'drupal_get_form',
+     'access arguments' => array('Add push notifications'),
+	 'page arguments' => array('push_notification_form'),
+	 'type' => MENU_LOCAL_TASK,
+	);
+	$items['admin/push_notification/edit/%'] = array(
+	 'title' => t('Create Push Notifications'),
+     'description' => t('Create Push Notifications'),
+     'page callback' => 'drupal_get_form',
+     'access arguments' => array('Add push notifications'),
+	 'page arguments' => array('push_notification_form',3),
+	);
+	$items['admin/push_notification/%/delete'] = array(
+     'title' => 'Delete',
+     'page callback' => 'drupal_get_form',
+     'page arguments' => array('notification_delete', 2),
+     'access arguments' => array('Add push notifications'),
+     'type' => MENU_CALLBACK,
+    );
+
+	$items['system_notifications/all'] = array(
+        'title' => 'System Notifications',
+        'description' => 'Link to My notifications',
+        'page callback' => '_system_notifications_list',
+        'access callback' => 'user_is_logged_in',
+        'type' => MENU_LOCAL_TASK,
+    );
+  $items['system_notifications/push'] = array(
+      'title' => 'System Notifications',
+      'description' => 'Link to My notifications',
+      //'page callback' => '_send_system_push_notifications',
+      'page callback' => '_admin_notifications_send',
+      'access arguments' => array('Send Custom push notifications'),
+      'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/notifications_tracking'] = array(
+    'title' => t('Sent Push Notifications Tracking'),
+    'description' => t('Sent Push Notifications Tracking'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('notification_tracking'),
+    'access arguments' => array('administer site configuration'),
+  );
+
+  $items['admin/config/notifications_tracking/details/nojs/%/%/%'] = array(
+    'page callback' => '_notification_tracking_details',
+    'page arguments' => array(4,5,6,7),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/notifications_tracking/details/ajax/%/%/%'] = array(
+    'delivery callback' => 'ajax_deliver',
+  ) + $items['admin/config/notifications_tracking/details/nojs/%/%/%'];
+
+  $items['system_notifications/sample_push'] = array(
+    'title' => 'System Notifications',
+    'description' => 'Sample notifications sending',
+    'page callback' => '_send_html_notifications',
+    'access arguments' => array('Send Custom push notifications'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['admin/config/push_notification/hashtags_user_search'] = array(
+    'title' => 'Users based on Hashtags Activities',
+    'description' => 'Search users based on Hashtags Activities',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('_search_hashtag_activities'),
+    'access arguments' => array('administer site configuration'),
+  );
+	return $items;
+}
+
+function _get_all_system_notifications(){
+	$output = l('Add push notification','admin/push_notification/add');
+	$header = array('Title','Message','Link','Start Date','End Date','Operations','');
+	$query = db_select('system_notification','sn')
+        ->fields('sn', array('notification_id','title','message','link','start_date','end_date'))
+		->orderBy('notification_id', 'DESC');
+    $result = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+    $rows = array();
+
+    foreach($result as $record){
+	    $start_date_array = getDate($record['start_date']);
+		$end_date_array = getDate($record['end_date']);
+        $rows[] = array(
+               $record['title'],
+               $record['message'],
+							 $record['link'],
+							 $start_date_array['mon'].'/'.$start_date_array['mday'].'/'.$start_date_array['year'],
+							 $end_date_array['mon'].'/'.$end_date_array['mday'].'/'.$end_date_array['year'],
+							 l('edit','admin/push_notification/edit/'.$record['notification_id']),
+							 l('delete', 'admin/push_notification/'.$record['notification_id'].'/delete'),
+		);
+    }
+	$output.= theme('table', array('header' => $header,
+                  	         'rows' => $rows ));
+   return $output;
+}
+
+function push_notification_form($form, &$form_state, $notifications=NULL, $search_users=NULL){
+  //$form['#attributes'] = array('enctype' => "multipart/form-data");
+	$startDateArray = array();
+	$endDateArray = array();
+	//if(arg(2) == 'edit' && is_numeric(arg(3))){
+  $send_to_user_ids = '';
+  if(!empty($notifications) && $notifications!=0){
+	  $notification = _get_push_notification($notifications);
+	  if (isset($notification->start_date)){
+		$startdateValue = getDate($notification->start_date);
+		$startDateArray = array('month' => $startdateValue['mon'],
+                       'day'   => $startdateValue['mday'],
+                       'year'  => $startdateValue['year']);
+	  } else {
+		$startDateArray = array();
+	  }
+	  if (isset($notification->end_date)){
+		$enddateValue = getDate($notification->end_date);
+		$endDateArray = array('month' => $enddateValue['mon'],
+                       'day'   => $enddateValue['mday'],
+                       'year'  => $enddateValue['year']);
+	  } else {
+		$endDateArray = array();
+	  }
+    $send_to_user_ids = $notification->send_to_user_ids;
+
+	} else{
+    $send_to_user_ids = isset($search_users) ? $search_users : '';
+  }
+  $form['notification_id'] = array(
+    '#type' => 'hidden',
+    //'#default_value' => $notification->notification_id,
+    '#default_value' => $notifications,
+  );
+  $form['title'] = array (
+   '#title' => t('Title'),
+   '#type' => 'textfield',
+   '#required' => TRUE,
+   '#default_value' => isset($notification->title) ? $notification->title : '',
+  );
+	$form['message'] = array (
+	 '#title' => t('Message'),
+	 '#type' => 'textarea',
+	 '#required' => TRUE,
+	 '#default_value' => isset($notification->message) ? $notification->message : '',
+	);
+	$form['link'] = array (
+	 '#title' => t('Link'),
+	 '#type' => 'textfield',
+	 '#required' => TRUE,
+	 '#default_value' => isset($notification->link) ? $notification->link : '',
+	);
+  if(!empty($notifications)){
+    $push_notifications_image = 'push_notifications_image'.$notification->notification_id;
+  }
+  $form['push_notifications_image'] = array(
+    '#title' => t('Image'),
+    '#type' => 'managed_file',
+    '#description' => t('Upload the Image'),
+    '#default_value' => variable_get($push_notifications_image, ''),
+    '#upload_location' => 'public://push_notifications_images/',
+  );
+	$form['date'] = array(
+	 '#type' => 'fieldset',
+	 '#title' => t('Validity Date'),
+	 '#collapsible' => FALSE,
+     '#collapsed' => FALSE,
+	);
+	$form['date']['start_date'] = array (
+	 '#title' => t('Start Date'),
+	 '#type' => 'date',
+	 '#required' => TRUE,
+	  '#default_value' => $startDateArray,
+	 '#date_format' => 'm-d-Y',
+	);
+	$form['date']['end_date'] = array (
+	 '#title' => t('End Date'),
+	 '#type' => 'date',
+	 '#required' => TRUE,
+	 '#default_value' => $endDateArray,
+	);
+  $form['userids_fieldset'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Send notification to '),
+    // Set up the wrapper so that AJAX will be able to replace the fieldset.
+    '#prefix' => '<div id="userids-fieldset-wrapper">',
+    '#suffix' => '</div>',
+  );
+  $form['userids_fieldset']['all_users'] = array (
+    '#type' => 'checkbox',
+    '#title' => 'All Users',
+    '#default_value' => isset($send_to_user_ids) ? 0 : 1,
+  );
+  $form['userids_fieldset']['users_to_send'] = array(
+    '#title' => t('Only to these users'),
+    '#type' => 'textfield',
+    '#default_value' => isset($send_to_user_ids) ? $send_to_user_ids : '',
+  );
+	$form['submit'] = array (
+	 '#type' => 'submit',
+	 '#value' => t('Save'),
+	 '#validate' => array('push_notification_form_validate'),
+	 '#submit' => array('push_notification_form_submit'),
+	);
+	$form['actions']['cancel'] = array(
+      '#markup' => l(t('Cancel'), 'admin/config/push_notification/list'),
+      '#weight' => 20,
+    );
+	return $form;
+}
+function push_notification_form_validate($form, &$form_state) {
+	$start_date = strtotime(date($form_state['values']['start_date']['year'].'-'.$form_state['values']['start_date']['month'].'-'.$form_state['values']['start_date']['day']));
+	$end_date = strtotime(date($form_state['values']['end_date']['year'].'-'.$form_state['values']['end_date']['month'].'-'.$form_state['values']['end_date']['day']));
+	if($start_date > $end_date){
+		form_set_error('start_date','Start date should not be greater than end date');
+	}
+}
+function push_notification_form_submit($form, &$form_state) {
+  //echo "<pre>";print_r($form_state['values']);exit;
+  module_load_include('module', 'content_notification', 'content_notification');
+	global $user;
+  $title = $form_state['values']['title'];
+	$message = $form_state['values']['message'];
+	$link = $form_state['values']['link'];
+	$start_date = strtotime(date($form_state['values']['start_date']['year'].'-'.$form_state['values']['start_date']['month'].'-'.$form_state['values']['start_date']['day']));
+	$end_date = strtotime(date($form_state['values']['end_date']['year'].'-'.$form_state['values']['end_date']['month'].'-'.$form_state['values']['end_date']['day']));
+  $image_fid = $form_state['values']['push_notifications_image'];
+  $send_to_all_users = $form_state['values']['all_users'];
+  $send_to_user_ids = $form_state['values']['users_to_send'];
+
+	if(!empty($form_state['values']['notification_id'])){
+		$notification_id = $form_state['values']['notification_id'];
+		$result = db_update('system_notification')
+			->fields(array(
+        'title' => $title,
+				'message' => $message,
+				'link' => $link,
+        'push_notifications_image' => $image_fid,
+				'start_date' => $start_date,
+				'end_date' => $end_date,
+        'send_to_all_users' => $send_to_all_users,
+        'send_to_user_ids' => $send_to_user_ids,
+			))
+			->condition('notification_id', $notification_id, '=')
+            ->execute();
+    $push_notifications_image = 'push_notifications_image'.$notification_id;
+    variable_set($push_notifications_image, $image_fid);
+	}else{
+	  $notification_id = db_insert('system_notification')
+		->fields(array(
+      'title' => $title,
+			'message' => $message,
+			'link' => $link,
+      'push_notifications_image' => $image_fid,
+			'start_date' => $start_date,
+			'end_date' => $end_date,
+      'send_to_all_users' => $send_to_all_users,
+      'send_to_user_ids' => $send_to_user_ids,
+		))
+		->execute();
+    $push_notifications_image = 'push_notifications_image'.$notification_id;
+    variable_set($push_notifications_image, $image_fid);
+		_add_notification(0, '', $notification_id, 'push_notification',$user->uid,'system');
+	}
+		drupal_set_message('Push Notification updated successfully');
+    drupal_goto('admin/config/push_notification/list');
+}
+
+function _get_push_notification($notification_id) {
+	$query = db_select('system_notification', 'sn')
+		->fields('sn',array('notification_id','title','message','link','start_date','end_date','send_to_all_users','send_to_user_ids'))
+		->condition('sn.notification_id',$notification_id);
+	$result = $query->execute()->fetchAll();
+	if(!empty($result)){
+		return $result[0];
+	}else{
+		return NULL;
+	}
+}
+
+function notification_delete($form, &$form_state, $notification) {
+	$form = array();
+	$form['notification_id'] = array(
+		'#type' => 'value',
+		'#value' => $notification,
+	);
+	return confirm_form($form,
+		t('Are you sure you want to delete this notification?'),
+		'admin/config/push_notification/list',
+		t('This action cannot be undone.'),
+		t('Delete'),
+		t('Cancel')
+	);
+	return $form;
+}
+
+/**
+ * submit handler for the notification_delete
+ * this function is invoked only when the user clicks confirm button
+ * clickin on cancel, the user goes back to the $path
+ */
+function notification_delete_submit($form, &$form_state) {
+	if (isset($form_state['values']['notification_id'])) {
+		$notification_id = $form_state['values']['notification_id'];
+		$delete_result = db_delete('system_notification')
+						->condition('notification_id',$notification_id)
+						->execute();
+	}
+	drupal_set_message('Notification deleted successfully');
+	$form_state['redirect'] = 'admin/config/push_notification/list';
+}
+
+function _system_notifications_list(){
+	$todays_date = strtotime(date('Y-m-d'));
+	global $user;
+	$result = db_query("select sn.* from system_notification sn where notification_id not in (select notification_id from system_notification_read where uid=$user->uid)
+			  AND (start_date <= $todays_date AND end_date >= $todays_date) ORDER BY sn.notification_id DESC");
+	$push_notifications = array();
+	foreach($result as $record){
+		$push_notifications[] = $record;
+	}
+	return $push_notifications;
+}
+
+/**
+ * Send System notifications as Push notifications to mobile app
+ */
+function _send_system_push_notifications() {
+  $todays_date = strtotime(date('Y-m-d'));
+  global $user;
+  $result = db_query("select sn.* from system_notification sn where start_date <= $todays_date AND end_date >= $todays_date AND push_notifications_sent=0 Limit 0,1");
+
+  $push_notifications = array();
+  foreach($result as $record){
+    if(!empty($record->push_notifications_image)){
+      $fid = $record->push_notifications_image;
+      $file = file_load($fid);
+      $uri = $file->uri;
+      $url = file_create_url($uri);
+      $record->image_url = $url;
+    }
+    $push_notifications[] = $record;
+  }
+  if(!empty($push_notifications)){
+    $content_url = '';
+    $nid = '';
+    $search_keyword = '';
+    $path = preg_replace('/\//','',parse_url($push_notifications[0]->link,PHP_URL_PATH),1);
+    $url = explode("/", $path);
+    if(!empty($url)){
+      if($url[0] == 'search_results'){
+        $search_keyword = str_replace("+"," ",$url[1]);
+      } else {
+        $org_path = drupal_lookup_path("source", $path);
+        if(!empty($org_path)){
+          $node = menu_get_object("node", 1, $org_path);
+          //if($node->type=='article' || $node->type=='blog'){
+          if($node->type=='article'){
+            $content_url = $push_notifications[0]->link;
+          } else {
+            $nid = $node->nid;
+          }
+        } else {
+          $content_url = $push_notifications[0]->link;
+        }
+      }
+      $image_url = $push_notifications[0]->image_url;
+
+      module_load_include('module', 'push_notifications', 'push_notifications');
+      $payload = array('alert' => $push_notifications[0]->message);
+
+      if(!empty($push_notifications[0]->send_to_user_ids)){
+        $recipients = explode(',', $push_notifications[0]->send_to_user_ids);
+        // Determine if any of the recipients have one or multiple tokens stored.
+        $tokens = array();
+        foreach ($recipients as $uid) {
+          $user_tokens = push_notification_get_user_tokens($uid);
+          if (!empty($user_tokens)) {
+            $tokens = array_merge($tokens, $user_tokens);
+          }
+        }
+        if (empty($tokens)) {
+          return FALSE;
+        }
+        // Group tokens into types.
+        $tokens_ios = array();
+        $tokens_android = array();
+        foreach ($tokens as $token) {
+          switch ($token['type']) {
+            case PUSH_NOTIFICATIONS_TYPE_ID_IOS:
+            $tokens_ios[] = $token['token'];
+            break;
+
+            case PUSH_NOTIFICATIONS_TYPE_ID_ANDROID:
+            $tokens_android[] = $token['token'];
+            break;
+          }
+        }
+      }else{
+        $tokens_ios = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS);
+        $tokens_android = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID);
+      }
+      //$tokens_android = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID);
+      //echo "<pre>";print_r($tokens_android);exit;
+      if (!empty($tokens_ios)) {
+        $payload_apns = array('aps' => $payload);
+        if(!empty($nid)){
+          $payload_apns['nid'] = $nid;
+        }
+        if(!empty($content_url)){
+          $payload_apns['url'] = $content_url;
+        }
+        if(!empty($search_keyword)){
+          $payload_apns['search'] = $search_keyword;
+        }
+
+        $payload_apns['ntype'] = 'admin_notification';
+
+        if(!empty($image_url)){
+          $payload_apns['imageurl'] = $image_url;
+        }
+        $payload_apns['category'] = 'YES_NO_CATEGORY';
+        //$ios_result = push_notifications_apns_send_message($tokens_ios, $payload_apns);
+        //$ios_result['success'] = TRUE;
+        if($ios_result['success']){
+          if(!empty($push_notifications[0]->send_to_user_ids)){
+            $ios_users = explode(",",$push_notifications[0]->send_to_user_ids);
+          }else{
+            $ios_users = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS,FALSE,TRUE);
+          }
+          foreach ($ios_users as $ios) {
+            /*db_insert("notifications_events_tracking")
+            ->fields(array(
+              'event_date' => strtotime(date('Y-m-d')),
+              'event_category' => 'Sent_Notification',
+              'event_action' => 'admin_notification',
+              'event_value' => isset($ios->uid) ? $ios->uid : $ios,
+              'device_type' => 'ios',
+              'admin_notification' => 1,
+            ))->execute();*/
+          }
+        }
+      }
+      //$tokens_android = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID);
+      if (!empty($tokens_android)) {
+        if(!empty($nid)){
+          $payload['nid'] = $nid;
+        }
+        if(!empty($content_url)){
+          $payload['url'] = $content_url;
+        }
+        if(!empty($search_keyword)){
+          $payload['search'] = $search_keyword;
+        }
+        $payload['ntype'] = 'admin_notification';
+
+        if(!empty($image_url)){
+          $payload['imageurl'] = $image_url;
+        }
+        $payload['category'] = 'YES_NO_CATEGORY';
+        // Determine which method to use for Google push notifications.
+        switch (PUSH_NOTIFICATIONS_GOOGLE_TYPE) {
+          case PUSH_NOTIFICATIONS_GOOGLE_TYPE_C2DM:
+           $android_result = push_notifications_c2dm_send_message($tokens_android, $payload);
+          break;
+
+          case PUSH_NOTIFICATIONS_GOOGLE_TYPE_GCM:
+           $android_result = push_notifications_gcm_send_message($tokens_android, $payload);
+          break;
+        }
+
+        //$android_result['success'] = TRUE;
+        if($android_result['success']){
+          if(!empty($push_notifications[0]->send_to_user_ids)){
+            $android_users = explode(",",$push_notifications[0]->send_to_user_ids);
+          }else{
+            $android_users = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID,FALSE,TRUE);
+          }
+          foreach ($android_users as $android) {
+            /*db_insert("notifications_events_tracking")
+            ->fields(array(
+              'event_date' => strtotime(date('Y-m-d')),
+              'event_category' => 'Sent_Notification',
+              'event_action' => 'admin_notification',
+              'event_value' => isset($android->uid) ? $android->uid : $android,
+              'device_type' => 'android',
+              'admin_notification' => 1,
+            ))->execute();*/
+          }
+       }
+      }
+      /*db_update('system_notification')
+      ->fields(array('push_notifications_sent' => 1))
+      ->condition('notification_id',$push_notifications[0]->notification_id)
+      ->execute();*/
+    }
+  }
+}
+
+
+function notification_tracking($form,$form_state) {
+  $form = array();
+
+  $form['start_date'] = array(
+    '#type' => 'date_popup',
+    '#title' => t('Start Date'),
+    '#date_format' => 'd/m/Y',
+    '#default_value' => date('Y-m-d'),
+  );
+  $form['end_date'] = array(
+    '#type' => 'date_popup',
+    '#title' => t('End Date'),
+    '#date_format' => 'd/m/Y',
+    '#default_value' => date('Y-m-d'),
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit',
+  );
+
+  /*$form['output'] = isset($form_state['values']) ?
+    _notification_tracking_generate_output($form, $form_state) :
+    array('#markup' => '<div id="notification_tracking_output"></div>');*/
+ $form['output'] = _notification_tracking_generate_output($form, $form_state);
+  return $form;
+}
+
+function notification_tracking_submit($form, &$form_state){
+  $form_state['rebuild'] = TRUE;
+}
+
+function _get_tracking_list_total($start_date, $end_date) {
+
+    $query = "SELECT COUNT(event_id) event_count, event_action FROM notifications_events_tracking
+              WHERE event_date >=:start_date AND event_date<=:end_date GROUP BY event_action";
+
+    $track_list = db_query($query, array(':start_date' => $start_date,':end_date' => $end_date));
+    return $track_list;
+}
+
+function _get_tracking_list($event_action, $start_date, $end_date) {
+    $query = "SELECT * FROM notifications_events_tracking
+              WHERE event_date >=:start_date AND event_date<=:end_date AND event_action=:event_action GROUP BY event_value";
+    $track_list = db_query($query, array(':start_date' => $start_date,':end_date' => $end_date,':event_action' => $event_action));
+    return $track_list;
+}
+
+function _notification_tracking_generate_output($form, $form_state) {
+  drupal_add_library('system', 'drupal.ajax');
+  if(!empty($form_state['values']['start_date'])){
+    $start_date = strtotime(date($form_state['values']['start_date']));
+  }else{
+    $start_date = strtotime(date('d-m-Y'));
+  }
+  //$start_date = "1438236511";
+  //echo "start_date=".$start_date."<br>";
+  if(!empty($form_state['values']['end_date'])){
+    $end_date = strtotime(date($form_state['values']['end_date']));
+  } else {
+    $end_date = strtotime(date('d-m-Y'));
+  }
+  //$end_date = "1438347181";
+  //echo "end_date=".$end_date;
+  $track_list = _get_tracking_list_total($start_date,$end_date);
+  //echo "<pre>";print_r($track_list);
+  $header = array(
+    array('data' => 'Event Action'),
+    array('data' => 'Total Events'),
+    );
+  foreach ($track_list as $key => $value) {
+    $rows[] = array(
+      'data' => array(
+        //l($value->event_action,'tracking_details/'.$value->event_action),
+        l($value->event_action, 'admin/config/notifications_tracking/details/nojs/'.$value->event_action.'/'.$start_date.'/'.$end_date, array('attributes' => array('class' => 'use-ajax'))),
+        $value->event_count,
+      )
+    );
+  }
+  $html = theme('table',
+        array(
+          'header' => $header,
+          'rows'=>$rows,
+          'caption' => 'Top Events', //Optional Caption for the table
+          'sticky' => TRUE,           //Optional to indicate whether the table headers should be sticky
+          'empty' => 'No Events Tracked...',   //Optional empty text for the table if resultset is empty
+        )
+      );
+  return array(
+    '#markup' => '<div id="notification_tracking_output">'.$html.'</div>',
+  );
+}
+
+function _notification_tracking_details($ajax,$event_action,$start_date,$end_date) {
+  $track_list = _get_tracking_list($event_action,$start_date,$end_date);
+  $header = array(
+    array('data' => 'Event Action'),
+    array('data' => 'Event Value'),
+    );
+  foreach ($track_list as $key => $value) {
+    $rows[] = array(
+      'data' => array(
+        $value->event_action,
+        $value->event_value,
+      )
+    );
+  }
+  $html = theme('table',
+        array(
+          'header' => $header,
+          'rows'=>$rows,
+          'caption' => 'Detailed Events Tracking list', //Optional Caption for the table
+          'sticky' => TRUE,           //Optional to indicate whether the table headers should be sticky
+          'empty' => 'No Events Tracked...',   //Optional empty text for the table if resultset is empty
+        )
+      );
+  $is_ajax = $ajax === 'ajax';
+  if ($is_ajax) {
+    $commands = array();
+    $commands[] = ajax_command_replace('#notification_tracking_output',$html);
+    return array(
+      '#type' => 'ajax',
+      '#commands' => $commands,
+    );
+  }
+}
+
+
+function _send_html_notifications(){
+  /*$todays_date = strtotime(date('Y-m-d'));
+  $result = db_query("select sn.* from system_notification sn where start_date <= $todays_date AND end_date >= $todays_date AND push_notifications_sent=0 Limit 0,1");
+  $push_notifications = array();
+
+  foreach($result as $record){
+    if(!empty($record->push_notifications_image)){
+      $fid = $record->push_notifications_image;
+      $file = file_load($fid);
+      $uri = $file->uri;
+      $url = file_create_url($uri);
+      $record->image_url = $url;
+    }
+    $push_notifications[] = $record;
+  }
+  //echo "<pre>";print_r($push_notifications);exit;
+  if(!empty($push_notifications)){
+    $content_url = '';
+    $nid = '';
+    $search_keyword = '';
+    $image_url = '';
+    $title = '';
+    $path = preg_replace('/\//','',parse_url($push_notifications[0]->link,PHP_URL_PATH),1);
+    $url = explode("/", $path);
+    if(!empty($url)){
+      if($url[0] == 'search_results'){
+        $search_keyword = str_replace("+"," ",$url[1]);
+      } else {
+        $org_path = drupal_lookup_path("source", $path);
+        if(!empty($org_path)){
+          $node = menu_get_object("node", 1, $org_path);
+          //if($node->type=='article' || $node->type=='blog'){
+          if($node->type=='article'){
+            $content_url = $push_notifications[0]->link;
+          } else {
+            $nid = $node->nid;
+          }
+        } else {
+          $content_url = $push_notifications[0]->link;
+        }
+      }
+      $image_url = $push_notifications[0]->image_url;
+      $title = $push_notifications[0]->title;
+      module_load_include('module', 'push_notifications', 'push_notifications');
+      $payload = array('alert' => $push_notifications[0]->message);
+
+      $tokens_ios = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS);
+      if (!empty($tokens_ios)) {
+        $payload_apns = array('aps' => $payload);
+        if(!empty($nid)){
+          $payload_apns['nid'] = $nid;
+        }
+        if(!empty($content_url)){
+          $payload_apns['url'] = $content_url;
+        }
+        if(!empty($search_keyword)){
+          $payload_apns['search'] = $search_keyword;
+        }
+
+        $payload_apns['ntype'] = 'admin_notification';.
+        if(!empty($image_url)){
+          $payload_apns['imageurl'] = $image_url;
+        }
+        //$ios_result = push_notifications_apns_send_message($tokens_ios, $payload_apns);
+        //$ios_result['success'] = TRUE;
+      }
+      //$tokens_android = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID);
+      $tokens_android = push_notifications_get_user_token('5042');
+      //echo "<pre>";print_r($tokens_android);exit;
+      if (!empty($tokens_android)) {
+        if(!empty($nid)){
+          $payload['nid'] = $nid;
+        }
+        if(!empty($content_url)){
+          $payload['url'] = $content_url;
+        }
+        if(!empty($search_keyword)){
+          $payload['search'] = $search_keyword;
+        }
+        $payload['ntype'] = 'admin_notification';
+
+        if(!empty($image_url)){
+          $payload['imageurl'] = $image_url;
+        }
+        if(!empty($title)){
+          $payload['title'] = $title;
+        }
+        //echo "<pre>";print_r($payload);exit;
+        // Determine which method to use for Google push notifications.
+        switch (PUSH_NOTIFICATIONS_GOOGLE_TYPE) {
+          case PUSH_NOTIFICATIONS_GOOGLE_TYPE_C2DM:
+           $android_result = push_notifications_c2dm_send_message($tokens_android, $payload);
+          break;
+
+          case PUSH_NOTIFICATIONS_GOOGLE_TYPE_GCM:
+           $android_result = push_notifications_gcm_send_message($tokens_android, $payload);
+          break;
+        }
+        echo "<pre>";print_r($android_result);
+        //$android_result['success'] = TRUE;
+      }
+      exit;
+    }
+  }*/
+  /*$sent_notification = _get_sent_notification_detail('5042');
+  echo "<pre>";print_r($sent_notification);exit;*/
+  /*module_load_include('module', 'personalization', 'personalization');
+  _store_hashtag_daily_score();*/
+
+  _get_joy_moments('109775');
+}
+
+function push_notifications_get_user_token($user = '') {
+  if ($user == '') {
+      return FALSE;
+  }
+
+  $query = db_select('push_notifications_tokens', 'pnt');
+  $query->fields('pnt', array('token'));
+  $query->condition('pnt.uid',$user);
+  $query->orderBy('timestamp', 'DESC');
+  $result = $query->execute();
+  $tokens = array();
+  $tokens[] = $result->fetchField();
+  return $tokens;
+}
+
+function _search_hashtag_activities($form, &$form_state) {
+  $form['#tree'] = TRUE;
+  $form['hashtags_fieldset'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Search users on Hashtags Activites'),
+    // Set up the wrapper so that AJAX will be able to replace the fieldset.
+    '#prefix' => '<div id="hashtags-fieldset-wrapper">',
+    '#suffix' => '</div>',
+  );
+
+  if (empty($form_state['num_hashtags'])) {
+    $form_state['num_hashtags'] = 1;
+  }
+  $math_operator_options = array('' => 'Select Operator','<' => '<','<=' => '<=','='=> '=','!=' =>'!=','>=' => '>=','>' => '>'
+    );
+  $logic_operator_options = array('AND' => 'AND','OR' => 'OR');
+  for ($i = 0; $i < $form_state['num_hashtags']; $i++) {
+    $form['hashtags_fieldset'][$i] = array(
+    '#prefix' => '<div class="two-col">',
+    '#suffix' => '</div>'
+    );
+
+    $form['hashtags_fieldset'][$i]['hashtag_text'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Hashtag'),
+      '#max_size' => '5',
+      '#prefix' => '<div class="col1">',
+      '#suffix' => '</div>'
+    );
+    $form['hashtags_fieldset'][$i]['math_operator'] = array(
+      '#type' => 'select',
+      '#title' => '',
+      '#options' => $math_operator_options,
+      '#prefix' => '<div class="col2">',
+      '#suffix' => '</div>'
+    );
+    $form['hashtags_fieldset'][$i]['hashtag_weight'] = array(
+      '#type' => 'textfield',
+      '#title' => t(''),
+      '#max_size' => '5',
+      '#prefix' => '<div class="col3">',
+      '#suffix' => '</div>'
+    );
+    $form['hashtags_fieldset'][$i]['logic_operator'] = array(
+      '#type' => 'select',
+      '#title' => '',
+      '#options' => $logic_operator_options,
+      '#prefix' => '<div class="col4">',
+      '#suffix' => '</div>'
+    );
+  }
+
+  $form['hashtags_fieldset']['add_search'] = array(
+    '#type' => 'submit',
+    '#value' => t('+'),
+    '#submit' => array('push_notification_add_more_add_one'),
+    // See the examples in ajax_example.module for more details on the
+    // properties of #ajax.
+    '#ajax' => array(
+      'callback' => 'push_notification_add_more_callback',
+      'wrapper' => 'hashtags-fieldset-wrapper',
+    ),
+  );
+
+  if ($form_state['num_hashtags'] > 1) {
+    $form['hashtags_fieldset']['remove_search'] = array(
+      '#type' => 'submit',
+      '#value' => t('-'),
+      '#submit' => array('push_notification_add_more_remove_one'),
+      '#ajax' => array(
+        'callback' => 'push_notification_add_more_callback',
+        'wrapper' => 'hashtags-fieldset-wrapper',
+      ),
+    );
+  }
+  $form['search_results'] = array(
+    '#type' => 'hidden',
+    '#value' => $form_state['storage']['search_users'],
+  );
+
+  $form['search_results_count'] = array(
+    '#type' => 'textfield',
+    '#title' => 'No.of users found',
+    '#value' => $form_state['storage']['search_users_count'],
+    '#attributes' => array('disabled' => 'disabled'),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Search'),
+  );
+  $form['send'] = array(
+    '#type' => 'button',
+    '#value' => t('Send Push Notification'),
+    '#submit' => array('_send_push_notification_form'),
+    '#executes_submit_callback' => TRUE,
+    '#limit_validation_errors' => FALSE,
+  );
+  return $form;
+}
+
+/**
+ * Callback for both ajax-enabled buttons.
+ *
+ * Selects and returns the fieldset with the names in it.
+ */
+function push_notification_add_more_callback($form, $form_state) {
+  return $form['hashtags_fieldset'];
+}
+
+/**
+ * Submit handler for the "add-one-more" button.
+ *
+ * Increments the max counter and causes a rebuild.
+ */
+function push_notification_add_more_add_one($form, &$form_state) {
+  $form_state['num_hashtags']++;
+  $form_state['rebuild'] = TRUE;
+}
+
+/**
+ * Submit handler for the "remove one" button.
+ *
+ * Decrements the max counter and causes a form rebuild.
+ */
+function push_notification_add_more_remove_one($form, &$form_state) {
+  if ($form_state['num_hashtags'] > 1) {
+    $form_state['num_hashtags']--;
+  }
+  $form_state['rebuild'] = TRUE;
+}
+
+function _search_hashtag_activities_validate($form, &$form_state){
+  $keyword_arr = $form_state['values']['hashtags_fieldset'];
+  foreach ($keyword_arr as $key => $kr) {
+    //echo "<pre>";print_r($key);
+    if (is_array($kr)) {
+        if(empty($kr['hashtag_text']) && $key != 'remove_search'){
+          form_set_error('hashtag_text', t('Please provide hashtag text'));
+        }
+        if(empty($kr['math_operator']) && $key != 'remove_search'){
+          form_set_error('math_operator', t('Please select the operator'));
+        }
+        if(empty($kr['hashtag_weight']) && $key != 'remove_search'){
+          form_set_error('hashtag_weight', t('Please provide hashtag weight'));
+        }
+    }
+  }
+  //exit;
+}
+function _search_hashtag_activities_submit($form, &$form_state){
+  if (count($form_state['values']['hashtags_fieldset']) > 0) {
+    // Unset the unwanted values if there.
+    if (isset($form_state['values']['hashtags_fieldset']['add_search'])) {
+      unset($form_state['values']['hashtags_fieldset']['add_search']);
+    }
+    if (isset($form_state['values']['hashtags_fieldset']['remove_search'])) {
+      unset($form_state['values']['hashtags_fieldset']['remove_search']);
+    }
+    $logic_operator = '';
+    $search_text = '';
+    $math_operator = '';
+    $hashtag_weight = '';
+    $tid = '';
+    $hashtags_fieldset_count = count($form_state['values']['hashtags_fieldset']);
+    $today = strtotime(date('Y-m-d'));
+    $hashtag_condition = '';
+    $hashtagweight_condition = '';
+    if(!empty($form_state['values']['hashtags_fieldset'][0]['hashtag_text'])){
+      $search_text = '#'.$form_state['values']['hashtags_fieldset'][0]['hashtag_text'];
+      $hashtag_term = taxonomy_get_term_by_name(trim($search_text),'hashtags');
+      $term_tid = reset($hashtag_term);
+      $query = "SELECT user_id FROM hashtags_activities WHERE activity_date<=".$today." AND ";
+      $query.="hashtag_tid=".$term_tid->tid.' ';
+      if($hashtags_fieldset_count > 1){
+        for($i=1;$i<$hashtags_fieldset_count;$i++){
+          if(!empty($form_state['values']['hashtags_fieldset'][$i]['hashtag_text'])){
+            $search_text = '#'.$form_state['values']['hashtags_fieldset'][$i]['hashtag_text'];
+            $math_operator = $form_state['values']['hashtags_fieldset'][$i]['math_operator'];
+            $hashtag_weight = $form_state['values']['hashtags_fieldset'][$i]['hashtag_weight'];
+            $logic_operator = $form_state['values']['hashtags_fieldset'][$i-1]['logic_operator'];
+
+            $hashtag_term = taxonomy_get_term_by_name(trim($search_text),'hashtags');
+            $term_tid = reset($hashtag_term);
+            $query.= $logic_operator;
+            $query.=" user_id IN ";
+            $query.="(SELECT user_id FROM hashtags_activities WHERE activity_date<=".$today." AND hashtag_tid=".$term_tid->tid;
+            $query.=" GROUP BY user_id HAVING SUM(hashtag_weight*no_of_times)".$math_operator." ".$hashtag_weight.") ";
+          }
+        }
+      }
+      $group_by_query=" GROUP BY user_id HAVING SUM(hashtag_weight*no_of_times)".$form_state['values']['hashtags_fieldset'][0]['math_operator']. " ".$form_state['values']['hashtags_fieldset'][0]['hashtag_weight'];
+      $query.=$group_by_query;
+      //echo $query;exit;
+      $hashtag_users = db_query($query);
+      $user_ids = [];
+      foreach ($hashtag_users as $hashtag => $user) {
+        $user_ids[] = $user->user_id;
+      }
+      $users = implode(",", $user_ids);
+
+      if(!empty($users)){
+        variable_set('search_hashtag_users',$users);
+      }else{
+        variable_set('search_hashtag_users','');
+      }
+
+      $form_state['storage']['search_users'] = $users;
+      $form_state['storage']['search_users_count'] = count($user_ids);
+      //$form_state['search_results']['#value'] = $users;
+      $form_state['rebuild'] = TRUE;
+    }
+
+  }
+}
+
+function _send_push_notification_form($form,&$form_state){
+  if(!empty($form_state['values']['search_results'])){
+    $search_results = $form_state['values']['search_results'];
+    //return drupal_build_form('push_notification_form',$form_state);
+    //drupal_render(drupal_get_form('push_notification_form', NULL, $search_results));
+    drupal_goto('admin/push_notification/add/0/'.$search_results);
+    exit;
+  }
+
+}
+
+/**
+ * Function to send Admin Push Notification to All users or for selected users.
+ */
+
+function _admin_notifications_send() {
+  $todays_date = strtotime(date('Y-m-d'));
+  $result = db_query("select sn.* from system_notification sn where start_date <= $todays_date AND end_date >= $todays_date AND push_notifications_sent=0");
+  $push_notifications = array();
+  $i=0;
+  foreach($result as $record) {
+    if(!empty($record->push_notifications_image)){
+      $fid = $record->push_notifications_image;
+      $file = file_load($fid);
+      $uri = $file->uri;
+      $url = file_create_url($uri);
+      $record->image_url = $url;
+    }
+    $push_notifications[] = $record;
+    //Push notifications not empty
+    if(!empty($push_notifications)) {
+      $content_url = '';
+      $nid = '';
+      $search_keyword = '';
+      $path = preg_replace('/\//','',parse_url($push_notifications[$i]->link,PHP_URL_PATH),1);
+      $url = explode("/", $path);
+      if(!empty($url)){
+        if($url[0] == 'search_results'){
+          $search_keyword = str_replace("+"," ",$url[1]);
+        }else{
+          $org_path = drupal_lookup_path("source", $path);
+          if(!empty($org_path)){
+            $node = menu_get_object("node", 1, $org_path);
+            //if($node->type=='article' || $node->type=='blog'){
+            if($node->type=='article'){
+              $content_url = $push_notifications[0]->link;
+            } else {
+              $nid = $node->nid;
+            }
+          } else {
+            $content_url = $push_notifications[$i]->link;
+          }
+        }
+        $image_url = $push_notifications[$i]->image_url;
+        module_load_include('module', 'push_notifications', 'push_notifications');
+        $payload = array('alert' => $push_notifications[$i]->message);
+
+        if(!empty($push_notifications[$i]->send_to_user_ids)){
+          $recipients = explode(',', $push_notifications[$i]->send_to_user_ids);
+          $sent_users = _get_users_already_sent();
+          $recipients_diff = array_diff($recipients,$sent_users);
+          if(empty($recipients_diff)){
+            $tokens_android = '';
+            $tokens_ios = '';
+          }else{
+            // Determine if any of the recipients have one or multiple tokens stored.
+            $tokens = array();
+            foreach ($recipients as $uid) {
+              $user_tokens = push_notification_get_user_tokens($uid);
+              if (!empty($user_tokens)) {
+                $tokens = array_merge($tokens, $user_tokens);
+              }
+            }
+            /*if (empty($tokens)) {
+              return FALSE;
+            }*/
+            // Group tokens into types.
+            $tokens_ios = array();
+            $tokens_android = array();
+            foreach ($tokens as $token) {
+              switch ($token['type']) {
+                case PUSH_NOTIFICATIONS_TYPE_ID_IOS:
+                $tokens_ios[] = $token['token'];
+                break;
+
+                case PUSH_NOTIFICATIONS_TYPE_ID_ANDROID:
+                $tokens_android[] = $token['token'];
+                break;
+              }
+            }
+          }
+        }else{
+          $tokens_ios = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS);
+          $tokens_android = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID);
+        }
+        //echo "<pre>";print_r($tokens_android);
+        if (!empty($tokens_ios)) {
+          $payload_apns = array('aps' => $payload);
+          if(!empty($nid)){
+            $payload_apns['nid'] = $nid;
+          }
+          if(!empty($content_url)){
+            $payload_apns['url'] = $content_url;
+          }
+          if(!empty($search_keyword)){
+            $payload_apns['search'] = $search_keyword;
+          }
+
+          $payload_apns['ntype'] = 'admin_notification';
+
+          if(!empty($image_url)){
+            $payload_apns['imageurl'] = $image_url;
+          }
+          $payload_apns['category'] = 'YES_NO_CATEGORY';
+          $ios_result = push_notifications_apns_send_message($tokens_ios, $payload_apns);
+          //$ios_result['success'] = TRUE;
+          if($ios_result['success']){
+            if(!empty($push_notifications[$i]->send_to_user_ids)){
+              $ios_users = explode(",",$push_notifications[$i]->send_to_user_ids);
+            }else{
+              $ios_users = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_IOS,FALSE,TRUE);
+            }
+            foreach ($ios_users as $ios) {
+              db_insert("notifications_events_tracking")
+              ->fields(array(
+                'event_date' => strtotime(date('Y-m-d')),
+                'event_category' => 'Sent_Notification',
+                'event_action' => 'admin_notification',
+                'event_value' => isset($ios->uid) ? $ios->uid : $ios,
+                'device_type' => 'ios',
+                'admin_notification' => 1,
+              ))->execute();
+            }
+          }
+        } //End of checking tokens_ios empty
+        if (!empty($tokens_android)) {
+          if(!empty($nid)){
+            $payload['nid'] = $nid;
+          }
+          if(!empty($content_url)){
+            $payload['url'] = $content_url;
+          }
+          if(!empty($search_keyword)){
+            $payload['search'] = $search_keyword;
+          }
+          $payload['ntype'] = 'admin_notification';
+
+          if(!empty($image_url)){
+            $payload['imageurl'] = $image_url;
+          }
+          $payload['category'] = 'YES_NO_CATEGORY';
+          //echo "<pre>";print_r($payload);
+          // Determine which method to use for Google push notifications.
+          switch (PUSH_NOTIFICATIONS_GOOGLE_TYPE) {
+            case PUSH_NOTIFICATIONS_GOOGLE_TYPE_C2DM:
+              $android_result = push_notifications_c2dm_send_message($tokens_android, $payload);
+            break;
+
+            case PUSH_NOTIFICATIONS_GOOGLE_TYPE_GCM:
+              $android_result = push_notifications_gcm_send_message($tokens_android, $payload);
+            break;
+          }
+          echo "<pre>";print_r($android_result);
+          //$android_result['success'] = TRUE;
+          if($android_result['success']){
+            if(!empty($push_notifications[$i]->send_to_user_ids)){
+              $android_users = explode(",",$push_notifications[$i]->send_to_user_ids);
+            }else{
+              $android_users = push_notifications_get_tokens(PUSH_NOTIFICATIONS_TYPE_ID_ANDROID,FALSE,TRUE);
+            }
+            //echo "<pre>";print_r($android_users);
+            foreach ($android_users as $android) {
+              db_insert("notifications_events_tracking")
+              ->fields(array(
+                'event_date' => strtotime(date('Y-m-d')),
+                'event_category' => 'Sent_Notification',
+                'event_action' => 'admin_notification',
+                'event_value' => isset($android->uid) ? $android->uid : $android,
+                'device_type' => 'android',
+                'admin_notification' => 1,
+              ))->execute();
+            }
+          }
+        } //End of checking tokens_android empty
+        db_update('system_notification')
+        ->fields(array('push_notifications_sent' => 1))
+        ->condition('notification_id',$push_notifications[$i]->notification_id)
+        ->execute();
+      } //End of $url empty check
+    } //End of Push notifications not empty
+    $i++;
+  } //End of foreach records
+  //echo "<pre>";print_r($push_notifications);exit;
+}
+
+
+/**
+ * Function to retrieve the users who already got the notification for today
+ */
+function _get_users_already_sent(){
+  $today = strtotime(date('Y-m-d'));
+  $query = db_select('notifications_events_tracking','net')
+  ->distinct()
+  ->fields('net',array('event_value'))
+  ->condition('net.event_date',$today,'=')
+  ->condition('net.admin_notification','1','=');
+  $result = $query->execute();
+  $user_ids = array();
+  foreach ($result as $record) {
+    $user_ids[] = $record->event_value;
+  }
+  return $user_ids;
+}
+
+/**
+ * Function to get the notification sent or not for the user
+ */
+function _get_sent_notification_detail($user) {
+  $today = strtotime(date('Y-m-d'));
+  $query = db_select('notifications_events_tracking','net');
+  $query->fields('net',array('event_id'))
+  ->condition('net.event_date',$today,'=')
+  ->condition('net.admin_notification','1','=')
+  ->condition('net.event_value',$user,'=');
+  $result = $query->execute()->fetchField();
+  return $result;
+}
+
+
+/**
+ * Function to get all the users who are not logged in since 'X' days and send notification to them
+ */
+
+function _get_users_not_logged_in() {
+  $query = "SELECT u1.uid FROM users u1 WHERE NOT EXISTS (
+            SELECT u2.uid FROM users u2 WHERE u1.uid = u2.uid AND access>=UNIX_TIMESTAMP((curdate() - interval 3 day)))
+            AND u1.uid NOT IN (SELECT su.entity_id FROM field_data_field_system_created_user su WHERE field_system_created_user_value=1)
+            ORDER BY u1.uid";
+  $result = db_query($query);
+  $users_list = [];
+  while($users = $result->fetchAssoc()){
+    if($users['uid']!=0){
+      $users_list[] = $users['uid'];
+    }
+  }
+  $payload = array('alert' => 'We have been missing you');
+
+  $payload['ntype'] = 'auto_notification';
+  $payload['message'] = 'Happy to see you again!';
+  //$payload['category'] = 'YES_NO_CATEGORY';
+  _send_auto_notifications($users_list,$payload,'auto_notification_not_active_user');
+}
+
+
+/**
+ * Function to send auto notifications to the user
+ */
+function _send_auto_notifications($users,$payload,$event_action) {
+  if($event_action!='fb_friend_joins'){
+    $noti_already_sent = _get_users_already_sent();
+    $final_users = array_diff($users, $noti_already_sent);
+  }else{
+    $final_users = $users;
+  }
+  if(empty($final_users)){
+    $tokens_android = '';
+    $tokens_ios = '';
+  }else{
+    // Determine if any of the recipients have one or multiple tokens stored.
+    $tokens = array();
+    foreach ($final_users as $uid) {
+      $user_tokens = push_notification_get_user_tokens($uid);
+      if (!empty($user_tokens)) {
+        $tokens = array_merge($tokens, $user_tokens);
+      }
+    }
+    // Group tokens into types.
+    $tokens_ios = array();
+    $tokens_android = array();
+    foreach ($tokens as $token) {
+      switch ($token['type']) {
+        case PUSH_NOTIFICATIONS_TYPE_ID_IOS:
+        $tokens_ios[] = $token['token'];
+        break;
+
+        case PUSH_NOTIFICATIONS_TYPE_ID_ANDROID:
+        $tokens_android[] = $token['token'];
+        break;
+      }
+    }
+  }
+  $tokens_ios = array();
+  $tokens_android = array();
+  foreach ($tokens as $token) {
+    switch ($token['type']) {
+    case PUSH_NOTIFICATIONS_TYPE_ID_IOS:
+      $tokens_ios[] = $token['token'];
+    break;
+
+    case PUSH_NOTIFICATIONS_TYPE_ID_ANDROID:
+      $tokens_android[] = $token['token'];
+    break;
+    }
+  }
+  /*echo "<pre>";print_r($payload);
+  echo "<pre>";print_r($tokens_ios);
+  echo "<pre>";print_r($tokens_android);*/
+  if (!empty($tokens_ios)) {
+    $payload_apns = array('aps' => $payload);
+    $ios_result = push_notifications_apns_send_message($tokens_ios, $payload_apns);
+    //$ios_result['success'] = TRUE;
+    if($ios_result['success']){
+      foreach ($final_users as $android) {
+        db_insert("notifications_events_tracking")
+        ->fields(array(
+        'event_date' => strtotime(date('Y-m-d')),
+        'event_category' => 'Sent_Notification',
+        'event_action' => $event_action,
+        'event_value' => isset($android->uid) ? $android->uid : $android,
+        'device_type' => 'ios',
+        'admin_notification' => 1,
+        ))->execute();
+      }
+    }
+  } //End of checking tokens_ios empty
+  if (!empty($tokens_android)) {
+    // Determine which method to use for Google push notifications.
+    switch (PUSH_NOTIFICATIONS_GOOGLE_TYPE) {
+      case PUSH_NOTIFICATIONS_GOOGLE_TYPE_C2DM:
+        $android_result = push_notifications_c2dm_send_message($tokens_android, $payload);
+      break;
+
+      case PUSH_NOTIFICATIONS_GOOGLE_TYPE_GCM:
+        $android_result = push_notifications_gcm_send_message($tokens_android, $payload);
+      break;
+    }
+    //echo "<pre>";print_r($android_result);
+    //$android_result['success'] = TRUE;
+    if($android_result['success']){
+      foreach ($final_users as $android) {
+        db_insert("notifications_events_tracking")
+        ->fields(array(
+        'event_date' => strtotime(date('Y-m-d')),
+        'event_category' => 'Sent_Notification',
+        'event_action' => $event_action,
+        'event_value' => isset($android->uid) ? $android->uid : $android,
+        'device_type' => 'android',
+        'admin_notification' => 1,
+        ))->execute();
+      }
+    }
+  } //End of checking tokens_android empty
+}
+
+
+/**
+ * Function to send notification to user when facebook freind joins
+ */
+
+function _send_notification_friend_joins($user){
+  if(isset($user->fboauth_fbid)){
+    $fbid = $user->fboauth_fbid;
+    $uid = $user->uid;
+    $friend_name = $user->name;
+    $query = db_select('fboauth_friends', 'fif');
+    $query->join('fboauth_users','fbu','fif.uid=fbu.uid');
+    $query->fields('fbu',array('uid'))
+      ->fields('fif',array('name'))
+      ->condition('fif.fbid', $fbid,'=');
+    $result = $query->execute()->fetchAll();
+    $payload['ntype'] = 'auto_notification';
+    $payload['message'] = 'Take me there, now.';
+    $payload['uid'] = $uid;
+    $payload['action0'] = 'N:1';
+    if(!empty($result)){
+      $push_message = '';
+      foreach ($result as $key => $value) {
+        $push_message = $value->name.", You have company. ".$friend_name." just joined Wishary.";
+        $payload['alert'] = $push_message;
+        _send_auto_notifications(array($value->uid),$payload,'fb_friend_joins');
+      }
+    }
+  }
+}
+
+/**
+ * Rules custom action to send notification when fb friend joins
+ */
+function push_notification_rules_action_info() {
+  return array(
+    'send_notification_custom_action' => array(
+      'label' => t('Send Push Notification to FB user\'s friend'),
+      'parameter' => array(
+        'account' => array(
+          'type' => 'user',
+          'label' => t('User'),
+        ),
+      ),
+      'configurable' => FALSE,
+      'group' => t('Custom'),
+      'callbacks' => array(
+        'execute' => '_send_notification_friend_joins',
+      ),
+    ),
+  );
+}
+
+/**
+ * Function to get the count of Joy Moments in a day for a user
+ */
+
+function _get_joy_moments($nid=NULL) {
+  global $user;
+  if($user->uid!=0 && $user->uid!=1){
+    $uid=$user->uid;
+    //Find self user count of hearted a product/blog/recommendation or shop click event in a day
+    $query = "SELECT COUNT(*) as uid
+              FROM (
+              SELECT uid AS uid FROM votingapi_vote vt WHERE vt.uid = ".$uid." AND FROM_UNIXTIME(vt.timestamp,'%Y-%m-%d') = '".date('Y-m-d')."'
+              UNION ALL
+              SELECT uid as uid FROM track_shop_event shop WHERE track_date=".strtotime(date('Y-m-d'))." and uid=".$uid.") vote_hash";
+    $total_joy = db_query($query)->fetchField();
+    if($total_joy<3){
+      //Find other user activities based on current user content
+      $query = db_select('votingapi_vote','vt');
+      $query->Join('node','n','vt.entity_id=n.nid AND n.uid='.$uid);
+      $query->where("FROM_UNIXTIME(vt.timestamp,'%Y-%m-%d') = :date", array(':date'=>date('Y-m-d')));
+      $alias = $query->addExpression('COUNT(vote_id)','vt_id');
+      $others_express = $query->execute()->fetchField();
+      $total_joy+= $others_express;
+    }
+    if($total_joy>=3){
+      $shared_result = db_select('hashtags_activities','ht')
+        ->fields('ht',array('hashtags_tracking_id'))
+        ->condition('ht.user_id',$uid,'=')
+        ->condition('ht.activity_type','share','=')
+        ->condition('ht.activity_date',strtotime(date('Y-m-d')),'=')
+        ->execute()->fetchField();
+      if(empty($shared_result)){
+        $payload['ntype'] = 'auto_notification';
+        $payload['message'] = 'Share';
+        $payload['nid'] = $nid;
+        $payload['action0'] = 'N:6';
+        $payload['alert'] = 'Show us some love, share what you love with the world.';
+        _send_auto_notifications(array($uid),$payload,'3+ joy moments');
+        drupal_json_output("Notification sent");
+      }
+    }
+  }
+}
+
+/**
+* Implements of hook_services_resources().
+*/
+
+function push_notification_services_resources() {
+  $resource = array(
+    'get_joy_moments' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Get 3+ joy moments of user',
+          'callback' => '_get_joy_moments',
+          'access callback' => '_joy_moments_access_provide_access',
+          'access arguments' => array('view'),
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'name' => 'nid',
+              'optional' => FALSE,
+              'source' => array('param' => 'nid'),
+              'type' => 'int',
+              'description' => 'Node Id',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return $resource;
+}
+
+function _joy_moments_access_provide_access() {
+  /*global $user;
+  if($user->uid!=0){
+    return TRUE;
+  }else{
+    return FALSE;
+  }*/
+  return TRUE;
+}

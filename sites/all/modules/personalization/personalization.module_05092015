@@ -1,0 +1,105 @@
+<?php
+
+/**
+* Implements of hook_services_resources().
+*/
+
+function personalization_services_resources() {
+  $resource = array(
+    'hashtags_track' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Tracking Hashtags',
+          'callback' => '_personalization_hashtags_tracking',
+          'args' => array(
+            array(
+              'name' => 'type',
+              'optional' => FALSE,
+              'source' => array('param' => 'type'),
+              'type' => 'string',
+              'description' => 'Type of activity (view/like/share/shop/search/follow)',
+            ),
+            array(
+              'name' => 'value',
+              'optional' => FALSE,
+              'source' => array('param' => 'value'),
+              'type' => 'string',
+              'description' => 'Value of the activity (nid/search_keyword/hashtag_id)',
+            ),
+          ),
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to node'),
+          'access arguments append' => FALSE,
+        ),
+      ),
+    ),
+  );
+  return $resource;
+}
+
+
+function _personalization_hashtags_tracking($type,$value){
+  if($type == 'view' || $type == 'like' || $type == 'share' || $type == 'shop'){
+    $node = node_load($value);
+    $description = $node->body['und'][0]['value'];
+    $hashtags = _get_hashtags($description);
+    foreach ($hashtags as $hashtag_id) {
+      echo $hashtag_id."<br>";
+    }
+    //echo "<pre>";print_r($hashtags);
+  }
+
+}
+
+
+function _get_hashtags($description){
+  $tags_list = array();
+  $pattern = "/(^#|[^&]#)([0-9A-Za-z_]+)/";
+  preg_match_all($pattern, strip_tags($description), $tags_list);
+  $hashtags = implode(',', $tags_list[0]);
+  $hashtags_array = explode(',',$hashtags);
+  $hashtags_id_array = [];
+  foreach ($hashtags_array as $hashtag) {
+    $hashtag_term = taxonomy_get_term_by_name(trim($hashtag),'hashtags');
+    $hashtag_id = reset($hashtag_term);
+    $hashtags_id_array[] = $hashtag_id->tid;
+  }
+ return $hashtags_id_array;
+}
+
+function _track_hashtags_activity($hashtag_tid,$user_id,$activity_type){
+  $weight = '';
+  if($activity_type == 'view'){
+    $weight = 1;
+  } else if($activity_type == 'like'){
+    $weight = 5;
+  }else if($activity_type == 'share'){
+    $weight = 10;
+  }else if($activity_type == 'shop'){
+    $weight = 10;
+  }else if($activity_type == 'search'){
+    $weight = 5;
+  }else if($activity_type == 'follow'){
+    $weight = 10;
+  }
+
+  $today_date = date('Y-m-d');
+  $query = db_select('hashtags_activities','ht')
+    ->fields('ht',array('hashtags_tracking_id'))
+    ->condition('ht.hashtag_tid',$hashtag_tid,'=')
+    ->condition('ht.user_id',$user_id,'=')
+    ->condition('ht.activity_date',$today_date,'=')
+    ->condition('ht.activity_type',$activity_type,'=');
+  $hashtag_activity =$query->execute()->fetchField();
+  echo $hashtag_activity;exit;
+
+
+  /*db_insert('hashtags_activities','ht')
+  ->fields(array(
+      'hashtag_tid' => $hashtag_tid,
+      'user_id' => $user_id,
+      'activity_date' => ,
+      'weight' => $weight,
+      'activity_type' => $activity_type,
+  ));*/
+}

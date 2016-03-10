@@ -1,0 +1,43 @@
+.at-term-list,
+.at-term-list-bacc
+{
+  padding: 5px 0;
+}
+
+.at-term,
+.at-term-bacc
+{
+  background-color:#eee;
+  padding:2px 4px 2px 4px;
+  display:inline;
+  margin:2px;
+  cursor:pointer;
+}
+.at-termmy,
+.at-baccmy 
+{
+  background-color:#eee;
+  padding:2px 4px 2px 4px;
+  display:inline;
+  margin:2px;
+}
+.at-term-action-remove,
+.at-term-action-remove-bacc
+{
+  color:red;
+  padding-left:5px;
+}
+.at-term-entry,
+.at-term-entry-bacc
+{
+  width: 300px;
+  float: left;
+}
+.at-add-btn,
+.at-add-btn-bacc
+{
+  margin: 6px 0 20px 10px;
+}
+.hideA {
+display: none;
+}

@@ -1,0 +1,26 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ */
+
+function my_module_schema() {
+  $schema['d7_example_table'] = array(
+    'description' => 'D7 Example Table',
+    'fields' => array(
+      'pid' => array(
+        'description' => 'Primary ID',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'name' => array(
+        'description' => 'D7 Example Table Name',
+        'type' => 'text',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('pid'),
+  );
+  return $schema;
+}
+

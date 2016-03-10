@@ -1,0 +1,26 @@
+<?php
+/**
+ * @file
+ * Block Lazyloader Install
+ *
+ * @author: Daniel Honrade http://drupal.org/user/351112
+ *
+ */
+
+
+/**
+ * Implements hook_install().
+ */
+function blocklazyloader_install() {
+  // Make sure this module called last
+  // to override any form provided by other modules
+  db_query("UPDATE {system} SET weight = 3010 WHERE name = 'blocklazyloader'");
+}
+
+
+/**
+ * Implements hook_uninstall().
+ */
+function blocklazyloader_uninstall() {
+  variable_del('blocklazyloader');
+}

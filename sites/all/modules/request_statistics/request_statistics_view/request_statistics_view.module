@@ -1,0 +1,23 @@
+<?php
+/**
+ * @file
+ * Request statistics view data through Views.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function request_statistics_view_menu() {
+  static $object;
+  if (!isset($object)) {
+    $object = new RequestStatisticsViewMenu();
+  }
+  return $object->menu();
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function request_statistics_view_views_api() {
+  return array('api' => '3');
+}

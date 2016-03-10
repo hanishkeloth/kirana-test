@@ -1,0 +1,155 @@
+<?php
+/**
+ * @file
+ * Module file for amazon_ses.
+ */
+
+define('AMAZON_SES_REQUEST_FALIURE', 0);
+define('AMAZON_SES_REQUEST_SUCCESS', 1);
+
+/**
+ * Implements hook_permission().
+ */
+function amazon_ses_permission() {
+  return array(
+    'amazon_ses_configuration' => array(
+      'title' => t('Configure Amazon Simple Email Service'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function amazon_ses_menu() {
+  $items['admin/config/aws-settings'] = array(
+    'title' => 'AWS Settings',
+    'type' => MENU_NORMAL_ITEM,
+    'access arguments' => array('amazon_ses_configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('amazon_ses_verify_sender_id_form'),
+    'file' => 'includes/amazon_ses.admin.inc',
+  );
+  $items['admin/config/aws-settings/aws-verify-ses-sender-id'] = array(
+    'title' => 'Verify Sender ID',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('amazon_ses_configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('amazon_ses_verify_sender_id_form'),
+    'file' => 'includes/amazon_ses.admin.inc',
+    'weight' => 2,
+  );
+  $items['admin/config/aws-settings/aws-ses-sender-id-list'] = array(
+    'title' => 'Sender ID List',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('amazon_ses_configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('amazon_ses_identity_list_form'),
+    'file' => 'includes/amazon_ses.admin.inc',
+    'weight' => 3,
+  );
+  $items['admin/config/aws-settings/dkim-setup'] = array(
+    'title' => 'DKIM Setup',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('amazon_ses_configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('amazon_ses_domain_dkim_enable_form'),
+    'file' => 'includes/amazon_ses.admin.inc',
+    'weight' => 4,
+  );
+  $items['admin/config/aws-settings/aws-statistics'] = array(
+    'title' => 'AWS Statistics',
+    'type' => MENU_LOCAL_TASK,
+    'access arguments' => array('amazon_ses_configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('amazon_ses_get_mail_statistics_form'),
+    'file' => 'includes/amazon_ses.admin.inc',
+    'weight' => 5,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function amazon_ses_form_amazon_ses_domain_dkim_enable_form_alter(&$form, &$form_state) {
+  // Display domain records required in DKIM setting.
+  if (isset($form_state['values'])) {
+    // When user clicks on Send Request button.
+    module_load_include('inc', 'amazon_ses', 'includes/amazon_ses.mail');
+    if ($form_state['values']['update'] == $form_state['triggering_element']['#value']) {
+      $selected_row = $form_state['values']['list_table'];
+      $action_parameter['Identities'] = array(
+        $form_state['complete form']['amazon_list_identities_update']['list_table']['#options'][$selected_row]['key'],
+      );
+
+      // Call of amazon Query API action GetIdentityDkimAttributes.
+      // This request is throttled per second.
+      $result = amazon_ses_send_request('GetIdentityDkimAttributes', $action_parameter);
+
+      // Display the result in table returned by Amazon SES.
+      if (isset($result['status'])) {
+        switch ($result['status']) {
+          case AMAZON_SES_REQUEST_SUCCESS:
+            $form['div']['domain_dkim_token_table']['#options'] = $result['member'];
+
+            // Disable checkboxes in tableselect.
+            foreach ($result['member'] as $key => $value) {
+              $form['div']['domain_dkim_token_table'][$key]['#disabled'] = TRUE;
+            }
+            $form['div']['domain_dkim_token_table']['#access'] = TRUE;
+            $help = t('DKIM settings for your domain have been generated.</strong>') . '<br/>';
+            $help .= t("The information below must be added to your domain's DNS records. How you update the
+              DNS settings depends on who provides your DNS service, if your DNS service is provided by a domain name registrar, please contact that registrar to update your DNS records.  <a href='@learn_dkim'>Learn More about DKIM</a>", array(
+                '@learn_dkim' => 'http://docs.aws.amazon.com/ses/latest/DeveloperGuide/dkim.html')
+              );
+            $help .= '<br/>' . t('<strong>DKIM:</strong> Waiting on sender verification.') . '<br/>';
+            $help .= t('<strong>DKIM Verification Status:</strong> @status', array('@status' => $result['DkimVerificationStatus']));
+            $help .= '<br/>' . t('To enable DKIM signing for your domain, the records below must be entered in your DNS settings. AWS will automatically detect the presence of these records, and allow DKIM signing at that time. Note that verification of these settings may take up to 72 hours.');
+            $form['div']['domain_dkim_info']['#prefix'] = "<div id=domain_dkim_info><strong>" . $help . "<br/>";
+            $form['div']['domain_dkim_info']['#suffix'] = '</div>';
+            break;
+
+          case AMAZON_SES_REQUEST_FALIURE:
+            $message = t('Request to <strong>GetIdentityDkimAttributes</strong> action of Amazon SES API call has failed,
+              missing some parameter or Request is not valid.');
+            drupal_set_message($message, 'error');
+            break;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Validate, if send email is not verified by Amazon SES.
+ */
+function amazon_ses_verify_email_identity_amazon($element, &$form_state) {
+  if (isset($element['#value'])) {
+    $action_parameter['Identities'][] = $element['#value'];
+
+    // Call the amazon Query API action GetIdentityVerificationAttributes.
+    module_load_include('inc', 'amazon_ses', 'includes/amazon_ses.mail');
+
+    $result = amazon_ses_send_request('GetIdentityVerificationAttributes', $action_parameter, '');
+    // Display the result in table returned by Amazon SES.
+    switch ($result['status']) {
+      case AMAZON_SES_REQUEST_SUCCESS:
+        if (isset($result['token']['row0']['VerificationStatus'])) {
+          $id_status = $result['token']['row0']['VerificationStatus'];
+          if ($id_status == 'Pending') {
+            form_error($element, t('@email address is in pending state, yet not verified by Amazon SES. \n so Please contact amazon SES or change the mail', array('@email' => $element['#value'])));
+          }
+        }
+        else {
+          form_error($element, t('Please send request for verifying @email  address to Amazon SES, Or change the mail', array('@email' => $element['#value'])));
+        }
+        break;
+
+      case AMAZON_MAIL_SERVICE_REQUEST_EXCEPTION:
+        form_error($element, t('Sending request to amazon is failed!, Please try again'));
+        break;
+    }
+  }
+}

@@ -1,0 +1,103 @@
+<?php
+/**
+ * @file
+ * Mail Manager Module main file
+ */
+
+/**
+ * Implements hook_enable().
+ */
+function mail_manager_enable() {
+  mailsystem_set(array('mail_manager' => 'MailManager_MailSystem'));
+}
+
+/**
+ * Implements hook_disable().
+ */
+function mail_manager_disable() {
+  mailsystem_clear(array('mail_manager' => ''));
+}
+
+/**
+ * Implements hook_mail().
+ */
+function mail_manager_mail($key, &$message, $params) {
+  MailManager_Hooks::mail($key, $message, $params);
+}
+
+/**
+ * Implementats hook_mail_alter().
+ */
+function mail_manager_mail_alter(&$message) {
+  MailManager_Hooks::mailAlter($message);
+}
+
+/**
+ * Implements hook_theme().
+ */
+function mail_manager_theme($existing, $type, $theme, $path) {
+  return MailManager_Hooks::theme($existing, $type, $theme, $path);
+}
+
+/**
+ * Implements hook_mailkeys().
+ */
+function mail_manager_mailkeys() {
+  return MailManager_Hooks::mailKeys();
+}
+
+/**
+ * Implements hook_mail_edit_token_types().
+ */
+function mail_manager_mail_edit_token_types($mailkey) {
+  return array($mailkey, MailManager_ManagedMail::MODULE_NAME, 'site');
+}
+
+/**
+ * Implements hook_mail_edit_text().
+ */
+function mail_manager_mail_edit_text($mailkey, $langcode) {
+  return MailManager_Hooks::mailEditText($mailkey, $langcode);
+}
+
+/**
+ * Implements hook_token_info().
+ */
+function mail_manager_token_info() {
+  return MailManager_Token::info();
+}
+
+/**
+ * Implements hook_tokens().
+ */
+function mail_manager_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  return MailManager_Token::tokens($type, $tokens, $data, $options);
+}
+
+
+
+/**
+ * Theme callback proxy.
+ * Because the core theme function (stupidly) uses function_exists to validate the theming function
+ * we cannot use a method so we just proxy the theming callback through this function.
+ *
+ * @param $variables
+ *
+ * @return mixed
+ */
+function theme_mail_manager_wrapper($variables) {
+  return MailManager::themeWrapper($variables);
+}
+
+/**
+ * Theme callback proxy.
+ * Because the core theme function (stupidly) uses function_exists to validate the theming function
+ * we cannot use a method so we just proxy the theming callback through this function.
+ *
+ * @param $variables
+ *
+ * @return mixed
+ */
+function theme_mail_manager_body($variables) {
+  return MailManager::themeBody($variables);
+}

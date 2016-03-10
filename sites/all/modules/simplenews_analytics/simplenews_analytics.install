@@ -1,0 +1,36 @@
+<?php
+
+/**
+ * @file
+ * Simplenews analytics installation.
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function simplenews_analytics_install() {
+  drupal_set_message(t('Simplenews Analytics installed successfully. Help is available at: <a href="!help">Simplenews Analytics help page</a>.', array('!help' => url('admin/help/simplenews_analytics'))));
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function simplenews_analytics_uninstall() {
+  variable_del('simplenews_analytics_utm_source');
+  variable_del('simplenews_analytics_utm_medium');
+  variable_del('simplenews_analytics_utm_campaign');
+  variable_del('simplenews_analytics_current_domain');
+}
+
+/**
+ * Update the campaign name to use a Drupal 7 compatible token
+ */
+function simplenews_analytics_update_7000() {
+  $campaign = variable_get('simplenews_analytics_utm_campaign', '[node:field_simplenews_term]');
+
+  if (substr_count($campaign, "!newsletter_name") > 0) {
+    $campaign = str_replace("!newsletter_name", "[node:field_simplenews_term]", $campaign);
+    variable_set('simplenews_analytics_utm_campaign', $campaign);
+    return t("Updated the campaign name to use a Drupal 7 compatible token");
+  }
+}

@@ -1,0 +1,12 @@
+name = Facebook Rules Message Integration
+description = provides a facebook token for use with messages
+core = 7.x
+package = Message
+
+dependencies[] = facebook_rules
+; Information added by Drupal.org packaging script on 2014-03-06
+version = "7.x-1.4+12-dev"
+core = "7.x"
+project = "facebook_rules"
+datestamp = "1394148805"
+

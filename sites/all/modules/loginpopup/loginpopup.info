@@ -1,0 +1,4 @@
+name = loooooogin
+description = Simple module that adds share buttons to nodes. The most common ones are included by defauly and any module can define others.
+core = 7.x
+

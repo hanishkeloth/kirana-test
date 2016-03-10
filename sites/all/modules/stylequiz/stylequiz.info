@@ -1,0 +1,4 @@
+name = stylequiz
+description = "STtylequiz for personalization"
+core = 7.x
+dependencies[] = ctools

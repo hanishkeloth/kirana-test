@@ -1,0 +1,13 @@
+name = Request statistics record
+description = Request statistics record data for visitor and page.
+core = 7.x
+dependencies[] = request_statistics
+files[] = request_statistics_record.php
+scripts[] = request_statistics_record.js
+
+; Information added by Drupal.org packaging script on 2015-07-07
+version = "7.x-1.0-beta1"
+core = "7.x"
+project = "request_statistics"
+datestamp = "1436255641"
+

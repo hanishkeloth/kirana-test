@@ -1,0 +1,6 @@
+name = wishary service
+description = attach file to node by nodeid and file id or update user profile picture
+package = Services
+core = 7.x
+dependencies[] = services
+dependencies[] = file

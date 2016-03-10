@@ -1,0 +1,84 @@
+<?php
+/**
+ * @file
+ * Deep link - Allow direct access to a specific item of content under certain circumstances - install.
+ */
+
+/**
+ * Implementation of hook_install().
+ */
+function deeplink_install() {
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function deeplink_uninstall() {
+  // Clear the variables
+  db_delete('variable')
+    ->condition('name', 'deeplink_%', 'LIKE')
+    ->execute();
+}
+
+/**
+ * Implementation of hook_schema().
+ */
+function deeplink_schema() {
+  $schema['deeplinks'] = array(
+    'description' => 'Stores deeplink information.',
+    'fields' => array(
+      'dlid'  => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'description' => 'Primary Key: Unique deeplink MD5 ID.',
+      ),
+      'control' => array(
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The control that was used to create this deeplink and controls it.',
+      ),
+      'entity_type' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The type of entity which is being deeplinked.',
+      ),
+      'bundle' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => 'The bundle type of the entity which is being deeplinked.',
+      ),
+      'entity_id' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The ID of the entity which is being deeplinked.',
+      ),
+      'expires' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'The timestamp of when this deeplink expires.',
+      ),
+      'data' => array(
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'medium',
+        'description' => 'Any data specific to the control for this deeplink.',
+      ),
+    ),
+    'primary key' => array('dlid'),
+    'indexes' => array(
+      'control' => array('control'),
+      'expires' => array('expires'),
+    ),
+  );
+
+  return $schema;
+}
+

@@ -1,0 +1,51 @@
+<?php
+
+/**
+ * Implements hook_permission().
+ *
+ * Adds custom permissions to make media permissioning more fine tuned.
+ */
+function cats_library_permission() {
+    return array(
+        'media widget upload files' => array(
+            'title' => t('Upload files'),
+            'description' => t('Use the Media widget browser to upload files.'),
+        ),
+        'media widget view library' => array(
+            'title' => t('View uploaded files'),
+            'description' => t('Use the Media widget browser to view and choose from uploaded files.'),
+        ),
+    );
+}
+
+/**
+ * Implements hook_media_browser_plugins_alter().
+ *
+ * Uses custom permissions to ensure anonymous users don't have more access
+ * than desired.
+ */
+function cats_library_media_browser_plugins_alter(&$plugin_output) {
+    // Remove media library access if the current user doesn't have the
+    // correct permission.
+    if (!user_access('media widget view library')) {
+        unset($plugin_output['library']);
+    }
+
+    // Add the upload file tabe if the current user has the correct permission.
+    if (user_access('media widget upload files')) {
+        // Built from media.media.inc lines 53-62.
+        // Parameters from media.browser.inc line 11.
+        module_load_include('inc', 'media', 'includes/media.pages');
+        $params = drupal_get_query_parameters();
+        $attached = array();
+        $upload_form_id = 'media_add_upload';
+        $upload_form = drupal_get_form($upload_form_id, $params);
+        $plugin = array(
+            '#title' => t('Upload'),
+            'form' => array($upload_form),
+            '#attached' => $attached,
+            '#weight' => -10,
+        );
+        $plugin_output['upload'] = $plugin;
+    }
+}

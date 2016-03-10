@@ -1,0 +1,131 @@
+<?php
+/**
+ * @file
+ * Install & uninstall functions for Push notifications module.
+ */
+
+/**
+ * Implementation of hook_schema
+ */
+
+function push_notification_schema(){
+    $schema['system_notification'] = array(
+        'description' => 'System Notifications',
+        'fields' => array(
+            'notification_id' => array(
+                'description' => 'The primary identifier for a notification.',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'title' => array(
+                'description' => 'Title of the message',
+                'type' => 'varchar',
+                'length' => 255,
+                'not null' => TRUE,
+            ),
+            'message' => array(
+                'description' => 'Push Notification message',
+                'type' => 'text',
+                'not null' => TRUE,
+            ),
+            'link' => array(
+              'description' => 'Link of the notification message',
+              'type' => 'text',
+              'not null' => TRUE,
+            ),
+            'start_date' => array(
+              'type' => 'int',
+              'not null' => TRUE,
+              'default' => 0,
+              'description' => 'Notification validity start date as a Unix timestamp.',
+            ),
+			     'end_date' => array(
+              'type' => 'int',
+              'not null' => TRUE,
+              'default' => 0,
+              'description' => 'Notification validity end date, as a Unix timestamp.',
+            ),
+           'push_notifications_sent' => array(
+              'type' => 'int',
+              'not null' => TRUE,
+              'default' => 0,
+              'description' => 'Tracking Notification sent or not',
+            ),
+           'push_notifications_image' => array(
+              'type' => 'int',
+              'not null' => TRUE,
+              'default' => 0,
+              'description' => 'Uploaded Image fid',
+            ),
+        ),
+        'primary key' => array('notification_id'),
+    );
+	  $schema['system_notification_read'] = array(
+        'description' => 'System Notifications Read status',
+        'fields' => array(
+            'sys_notify_read' => array(
+                'description' => 'The primary identifier for a notification.',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'notification_id' => array(
+                'description' => 'System notification foreign key',
+                'type' => 'int',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'uid' => array(
+              'description' => 'Current user id',
+              'type' => 'int',
+              'unsigned' => TRUE,
+              'not null' => TRUE,
+            ),
+            'read_status' => array(
+              'type' => 'int',
+              'unsigned' => TRUE,
+              'not null' => TRUE,
+              'description' => 'Read status of notification',
+            ),
+        ),
+        'primary key' => array('sys_notify_read'),
+    );
+    $schema['notifications_events_tracking']	 = array(
+      'description' => 'Tracking the analytics for notifications sent',
+      'fields' => array(
+          'event_id' => array(
+            'description' => 'The primary identifier for events tracking',
+            'type' => 'serial',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+          ),
+          'event_date' => array(
+            'type' => 'int',
+            'not null' => TRUE,
+            'default' => 0,
+            'description' => 'Event tracked date as a Unix timestamp.',
+          ),
+          'event_category' => array(
+            'type' => 'varchar',
+            'length' => 32,
+            'not null' => TRUE,
+            'description' => 'Event Category',
+          ),
+          'event_action' => array(
+            'type' => 'varchar',
+            'length' => 32,
+            'not null' => TRUE,
+            'description' => 'Event Action',
+          ),
+          'event_value' => array(
+            'type' => 'int',
+            'length' => 11,
+            'not null' => TRUE,
+            'description' => 'Event value',
+          ),
+      ),
+      'primary key' => array('event_id'),
+    );
+    return $schema;
+}

@@ -1,0 +1,7 @@
+<?php 
+
+function search_button_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'custom-search-blocks-form-1') {
+    $form['actions']['submit']['#attributes']['class'][] = 'glyphicon glyphicon-search';
+  }
+}

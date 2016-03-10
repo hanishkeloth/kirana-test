@@ -1,0 +1,150 @@
+<?php
+/**
+ * @file
+ * Block Lazyloader Module
+ *
+ * @author: Daniel Honrade http://drupal.org/user/351112
+ *
+ * Note: Obviously, this will not work unless the javascript is on.
+ *
+ */
+define('BLOCKLAZYLOADER_PATH', base_path() . drupal_get_path('module', 'blocklazyloader'));
+
+
+/**
+ * Implements hook_init().
+ *
+ * Sets the defaults global
+ *
+ */
+function blocklazyloader_init() {
+
+  global $_blocklazyloader_defaults;
+  global $_blocklazyloader_set;
+
+  $_blocklazyloader_defaults = array(
+    'enabled'        => 1,          // always enabled by default
+    'excludedblocks' => 'block-system-main, block-user-login',  // block IDs to be excluded
+    'class'          => 'content',  // the div class of your theme's block content
+    'distance'       => 0,          // 0 pixel distance to the viewable browser window before the actual block is loaded
+    'loader_icon'    => 7,          // default loader icon
+    'exclude'        => '',         // pages to exclude from block lazyloader
+  );
+
+  $_blocklazyloader_set = variable_get('blocklazyloader', $_blocklazyloader_defaults);
+}
+
+
+/**
+ * Implements hook_menu().
+ *
+ */
+function blocklazyloader_menu() {
+
+  $items = array();
+
+  $items['admin/structure/block/blocklazyloader'] = array(
+    'title' => 'Block Lazyloader',
+    'page callback' => 'drupal_get_form',
+    'access callback' => 'user_access',
+    'access arguments' => array('administer blocklazyloader'),
+    'page arguments' => array('blocklazyloader_admin', NULL),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'blocklazyloader.admin.inc',
+    'description' => 'Configure Block Lazyloader',
+  );
+  $items['blocklazyloader'] = array(
+    'title' => 'Blocks using lazyloader',
+    'page callback' => 'blocklazyloader_get_block_content',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+
+/**
+ * Implements hook_perm().
+ *
+ */
+function blocklazyloader_permission() {
+
+  return array(
+    'administer blocklazyloader' => array(
+      'title' => t('Administer Block Lazyloader'),
+      'description' => t('Perform administration tasks for Block Lazyloader.'),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_block_view().
+ * template_preprocess_block()
+ *
+ */
+function blocklazyloader_preprocess_block(&$vars) {
+
+  global $_blocklazyloader_set;
+
+  $settings = $_blocklazyloader_set;
+
+  if ($settings['enabled'] && !drupal_match_path($_GET['q'], $settings['exclude'])) {
+    $excluded_blocks_array = explode(',', preg_replace('/ /', '', $settings['excludedblocks']));
+    $vars['content'] = in_array($vars['block_html_id'], $excluded_blocks_array) ? $vars['content']: '';
+  }
+}
+
+
+/**
+ * Custom function
+ *
+ * - gets data from database
+ *
+ */
+function blocklazyloader_get_block_content() {
+
+  $module = $_GET['module'];
+  $delta = $_GET['delta'];
+  if ($module && $delta) {
+    //$block = block_load($module, $delta);
+    if (function_exists($module . '_block_view')) {
+      $function = $module . '_block_view';
+      $block = $function($delta);
+      //print render($block['content']);
+      drupal_json_output(render($block['content']));
+    }
+  }
+}
+
+
+
+/**
+ * Implements hook_process_html().
+ *
+ * Initialize the trigger for blocklazyloader
+ *
+ */
+function blocklazyloader_process_html(&$vars) {
+
+  global $_blocklazyloader_set;
+
+  $settings = $_blocklazyloader_set;
+
+  if ($settings['enabled'] && !drupal_match_path($_GET['q'], $settings['exclude'])) {
+
+    $icon = ($settings['loader_icon'] != 0) ? BLOCKLAZYLOADER_PATH . '/loader/loader-' . $settings['loader_icon'] . '.gif': '';
+
+    $excluded_blocks_array = explode(',', preg_replace('/ /', '', $settings['excludedblocks']));
+    $excluded_blocks = json_encode($excluded_blocks_array);
+
+    $blocklazyloader_init = '
+      <script type="text/javascript">
+        jQuery(function($){
+          $(".block").blocklazyloader({excludedBlocks: ' . $excluded_blocks . ', contentClass: "' . trim($settings['class']) . '", distance: ' . trim($settings['distance']) . ', icon: "' . $icon . '" });
+        });
+      </script>';
+
+    $vars['page_bottom'] .= $blocklazyloader_init;
+  }
+}

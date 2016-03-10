@@ -1,0 +1,142 @@
+<?php
+/**
+ * Implements hook_permission().
+ */
+
+    
+/*
+ 
+so you just made an image with a post to your endpoint /file
+ 
+with
+{
+    "filename": "test.png",
+    "target_uri": "public://test.png",
+    "filemime": "image/png",
+    "file": "bac64encodestring"
+ 
+}
+ 
+and it gave you the fid in return COOL 
+ 
+ 
+help form http://pingv.com/blog/an-introduction-drupal-7-restful-services
+ 
+LETS ATTACH THAT TO A KNOWN NODE
+ 
+use GET to http://yoursite.com/yourendpoint/fileattach/retrieve?nid=[NID]&fid=[FID]
+ 
+ 
+MAKE THE IMAGE YOUR PROFILE PICTURE
+or to update a user profile just go with
+use GET to http://yoursite.com/yourendpoint/fileattach/retrieve?fid=[FID]&field=profile
+- or GET
+http://localhost/dnet/testend/fileattach/retrieve?fid=1&field=profile
+ 
+*/
+/**
+ * Implements of hook_services_resources().
+ */
+
+function wishary_story_services_resources() {
+  return array(
+    'wishary_story' =>array(                            // My new resource
+      'create' => array(
+        'callback' => '_wishary_story_create_node',
+        'access callback' => '_wishary_story_create_access',
+        'args' => array(
+          array(
+            'name' => 'data',
+            'type' => 'struct',
+            'description' => 'The note data object',
+            'source' => 'data',
+            'optional' => FALSE,
+          ),
+
+        ),
+      ),
+    ),
+  );
+}
+
+/**
+ * Access callback
+ */
+function _wishary_story_create_access() {
+    return TRUE;
+}
+
+/**
+ * Callback function that creates the node
+ */
+
+ 
+ 
+/**
+ * Callback function for the  retrieve
+ */
+function _wishary_story_create_node($request, $data) {
+ global $user;
+    $array=array();
+          
+  // Check for mad values
+   $body = $request['body'];
+  $type = $request['type'];
+   $format = $request['format'];
+   $summary = $request['summary'];
+   $fid1 = $request['fid1'];
+   $fid2 = $request['fid2'];
+   $fid3 = $request['fid3'];
+   $fid4 = $request['fid4'];
+   $fid5 = $request['fid5'];
+   $parent_id = $request['parent_id'];
+  $fid = intval($fid);
+   
+ $node = new stdClass(); 
+
+ $node->title = $arg['fid3']; 
+
+ $node = new stdClass(); // We create a new node object
+  $node->type = "expression"; // Or any other content type you want
+  $node->title = "Article title";
+  $node->language = LANGUAGE_NONE; // Or any language code if Locale module is enabled. More on this below *
+  //$node->path = array('alias' => 'your node path'); // Setting a node path
+  node_object_prepare($node); // Set some default values.
+  $node->uid = $user->uid; // admin id
+  // Let's add standard body field
+  $node->body[$node->language][0]['value'] = $body;
+  $node->body[$node->language][0]['summary'] = 'Here goes a summary';
+  $node->body[$node->language][0]['format'] = 'full_html'; // If field has a format, you need to define it. Here we define a default filtered_html format for a body field
+  // Add images
+  $image_limit = 5;
+  $images = array(//images to attach to node
+    '0' => 'http://cf.juggle-images.com/matte/white/280x280/drupal-logo-primary.jpg',
+    '1' => 'http://cdn.flaticon.com/png/256/37187.png',
+    '2' => 'https://www.drupal.org/files/project-images/logo-128x128.jpg',
+    '3' => 'http://guillermocerezo.com/sites/default/files/field/image/drupal-logo_0.jpg',
+    '4' => 'http://drupalcrafters.org/sites/default/files/DrupalCraft-logo_0.png'
+  );
+  /*for ($i = 0; $i < $image_limit; $i++) {
+    $file_info = system_retrieve_file($images[$i], 'public://pictures/', TRUE, FILE_EXISTS_REPLACE); //storing image inside picture folder
+    //$file_info->fid = array(36329,36328,36327);
+    if ($file_info->fid) {//if fid exist then image is saved from URL.
+      $node->field_image_story[LANGUAGE_NONE][$i]['fid'] = $file_info->fid; //assign image
+    }
+  }*/
+  $node->field_expression_image[LANGUAGE_NONE][0]['fid']=$fid1;
+   $node->field_expression_image[LANGUAGE_NONE][0]['width']=600;
+    $node->field_expression_image[LANGUAGE_NONE][0]['height']=800;
+  $node->field_expression_image[LANGUAGE_NONE][1]['fid']=$fid2;
+  $node->field_expression_image[LANGUAGE_NONE][2]['fid']=$fid3;
+  $node->field_expression_image[LANGUAGE_NONE][3]['fid']=$fid4;
+  $node->field_expression_image[LANGUAGE_NONE][4]['fid']=$fid5;
+ 
+  $node = node_submit($node); // Prepare node for a submit
+  node_save($node); // After this call we'll get a nid
+  drupal_set_message('article  saved !!!');
+  watchdog('info', 'Article node created');
+
+
+  return $node;
+  
+}

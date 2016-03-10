@@ -1,0 +1,197 @@
+<?php
+
+/**
+* Implements of hook_services_resources().
+*/
+
+function personalization_services_resources() {
+  $resource = array(
+    'hashtags_track' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Tracking Hashtags',
+          'callback' => '_personalization_hashtags_tracking',
+          'args' => array(
+            array(
+              'name' => 'type',
+              'optional' => FALSE,
+              'source' => array('param' => 'type'),
+              'type' => 'string',
+              'description' => 'Type of activity (view/like/share/shop/search/follow)',
+            ),
+            array(
+              'name' => 'value',
+              'optional' => FALSE,
+              'source' => array('param' => 'value'),
+              'type' => 'string',
+              'description' => 'Value of the activity (nid/search_keyword/hashtag_id)',
+            ),
+            array(
+              'name' => 'uid',
+              'optional' => FALSE,
+              'source' => array('param' => 'uid'),
+              'type' => 'string',
+              'description' => 'User Id',
+            ),
+          ),
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to node'),
+          'access arguments append' => FALSE,
+        ),
+      ),
+    ),
+  );
+  return $resource;
+}
+
+/**
+ * Track Hashtag activities for user
+ */
+
+function _personalization_hashtags_tracking($type,$value,$uid){
+  if($type == 'view' || $type == 'like' || $type == 'share' || $type == 'shop'){
+    $node = node_load($value);
+    $description = $node->body['und'][0]['value'];
+    $hashtags = _get_hashtags($description);
+  }else if($type == 'search'){
+    $search_text = $value;
+    $hashtags = _get_hashtags($search_text);
+  }else if($type == 'follow'){
+    $hashtags[] = $value;
+  }
+  foreach ($hashtags as $hashtag_id) {
+    if(isset($hashtag_id)){
+      _track_hashtags_activity($hashtag_id,$uid,$type);
+    }
+  }
+
+  //Track Shop Click Event
+  if($type == 'shop'){
+    db_insert('track_shop_event')
+    ->fields(array('track_date'=>strtotime(date('Y-m-d')),'nid' =>$value, 'uid' => $uid))
+    ->execute();
+  }
+}
+
+
+function _get_hashtags($description){
+  $tags_list = array();
+  $pattern = "/(^#|[^&]#)([0-9A-Za-z_]+)/";
+  preg_match_all($pattern, strip_tags($description), $tags_list);
+  $hashtags = implode(',', $tags_list[0]);
+  $hashtags_array = explode(',',$hashtags);
+  $hashtags_id_array = [];
+  foreach ($hashtags_array as $hashtag) {
+    $hashtag_term = taxonomy_get_term_by_name(trim($hashtag),'hashtags');
+    $hashtag_id = reset($hashtag_term);
+    $hashtags_id_array[] = $hashtag_id->tid;
+  }
+ return $hashtags_id_array;
+}
+
+function _track_hashtags_activity($hashtag_tid,$user_id,$activity_type){
+  $weight = '';
+  if($activity_type == 'view'){
+    $weight = 1;
+  } else if($activity_type == 'like'){
+    $weight = 5;
+  }else if($activity_type == 'share'){
+    $weight = 10;
+  }else if($activity_type == 'shop'){
+    $weight = 10;
+  }else if($activity_type == 'search'){
+    $weight = 5;
+  }else if($activity_type == 'follow'){
+    $weight = 10;
+  }
+
+  $today_date = date('Y-m-d');
+  $query = db_select('hashtags_activities','ht')
+    ->fields('ht',array('no_of_times'))
+    ->condition('ht.hashtag_tid',$hashtag_tid,'=')
+    ->condition('ht.user_id',$user_id,'=')
+    ->condition('ht.activity_date',strtotime($today_date),'=')
+    ->condition('ht.activity_type',$activity_type,'=');
+  $hashtag_activity = $query->execute()->fetchField();
+  if(empty($hashtag_activity)){
+    $hashtag_act_val = array(
+      'hashtag_tid' => $hashtag_tid,
+      'user_id' => $user_id,
+      'activity_date' => strtotime($today_date),
+      'hashtag_weight' => $weight,
+      'activity_type' => $activity_type,
+      'no_of_times' => 1,
+    );
+    $hashtags_activities = db_insert('hashtags_activities')
+    ->fields($hashtag_act_val)
+    ->execute();
+  }else{
+    $no_of_times = intval($hashtag_activity)+1;
+    $hashtags_activities = db_update('hashtags_activities')
+    ->fields(array('no_of_times'=>$no_of_times))
+    ->condition('hashtag_tid',$hashtag_tid,'=')
+    ->condition('user_id',$user_id,'=')
+    ->condition('activity_date',strtotime($today_date),'=')
+    ->condition('activity_type',$activity_type,'=')
+    ->execute();
+  }
+}
+
+
+/**
+ * Function to update the Hashtags weightage daily
+ */
+function _store_hashtag_daily_score(){
+  $today = strtotime(date('Y-m-d'));
+  $query = db_select('hashtags_activities','ht')
+    ->fields('ht',array('user_id','hashtag_tid'))
+    ->condition('ht.activity_date',$today,'=');
+  $alias = $query->addExpression('sum(hashtag_weight*no_of_times)','daily_score');
+  $query->groupby('ht.user_id')
+  ->groupby('ht.hashtag_tid');
+  $daily_score_list = $query->execute()->fetchAll();
+  if(!empty($daily_score_list)){
+    foreach ($daily_score_list as $daily_score => $value) {
+      db_insert("hashtag_activities_daily_score")
+      ->fields(array(
+        'hashtag_tid' => $value->hashtag_tid,
+        'user_id' => $value->user_id,
+        'activity_date' => $today,
+        'daily_score' => $value->daily_score,
+      ))
+      ->execute();
+    }
+  }
+  $daily_score_query = db_select("hashtag_activities_daily_score",'ds')
+    ->fields('ds',array('hashtag_tid','user_id'));
+  $alias = $daily_score_query->addExpression('daily_score*1','cumulative_score');
+  $daily_score_query->groupby('user_id')
+  ->groupBy('hashtag_tid')
+  ->orderBy('cumulative_score','DESC');
+   $cumulative_score_list = $daily_score_query->execute()->fetchAll();
+  if(!empty($cumulative_score_list)){
+    foreach ($cumulative_score_list as $cumulative_score => $cumulative_score_value) {
+      $check_cumulative_score = db_select('hashtag_activities_cumulative_score','cs')
+        ->fields('cs',array('cumulative_score_id'))
+        ->condition('cs.user_id',$cumulative_score_value->user_id,'=')
+        ->condition('cs.hashtag_tid',$cumulative_score_value->hashtag_tid,'=')
+        ->execute()->fetchField();
+      if(empty($check_cumulative_score)){
+        db_insert("hashtag_activities_cumulative_score")
+        ->fields(array(
+          'hashtag_tid' => $cumulative_score_value->hashtag_tid,
+          'user_id' => $cumulative_score_value->user_id,
+          'cumulative_score' => $cumulative_score_value->cumulative_score,
+        ))
+        ->execute();
+      }else{
+        db_update('hashtag_activities_cumulative_score')
+        ->fields(array('cumulative_score' => $cumulative_score_value->cumulative_score))
+        ->condition('user_id',$cumulative_score_value->user_id)
+        ->condition('hashtag_tid',$cumulative_score_value->hashtag_tid)
+        ->execute();
+      }
+    }
+  }
+  echo "updated successfully";exit;
+}

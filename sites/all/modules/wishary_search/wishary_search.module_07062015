@@ -1,0 +1,286 @@
+<?php
+
+function wishary_search_menu() {
+
+    $items['wish_search/suggestions/%'] = array(
+     'description' => "Search Suggestions",
+     'page callback' => 'wishary_search_suggestions',
+     'page arguments' => array(2),
+     'access callback' => TRUE,
+     'type' => MENU_CALLBACK,
+    );
+
+    $items['search_results/%'] = array(
+     'description' => "Search Suggestions",
+     'page callback' => 'wishary_search_results',
+     'page arguments' => array(1),
+     'access callback' => TRUE,
+     'type' => MENU_CALLBACK,
+    );
+
+    $items['search_results_list/%'] = array(
+     'description' => "Search Suggestions",
+     'page callback' => 'wishary_search_results_ajax',
+     'page arguments' => array(1),
+     'access callback' => TRUE,
+     'type' => MENU_CALLBACK,
+    );
+
+    return $items;
+}
+
+/**
+ * Implements hook_block_theme().
+ */
+function wishary_search_theme() {
+    return array(
+        'search_suggestions' => array(
+            'variables' => array('suggestions' => array()),
+            'template' => 'themes/search_suggestions',
+        ),
+        'wishary_search_results' => array(
+            'variables' => array('wishary_search_results' => array()),
+            'template' => 'themes/wishary_search',
+        ),
+        'wishary_search_results_retrieve' => array(
+            'variables' => array('wishary_search_results_retrieve' => array()),
+            'template' => 'themes/wishary_result',
+        ),
+    );
+}
+
+function wishary_search_results($search_keyword=NULL){
+    /*drupal_add_js(drupal_get_path('module', 'wishary_search') . '/js/jquery.url.js');
+    drupal_add_js(drupal_get_path('module', 'wishary_search') . '/js/wishary_search.js');
+    drupal_add_js('initializeTable();', 'inline');
+
+    return ('<div id="search-results"></div>');*/
+
+    return theme('wishary_search_results');
+}
+
+function _search_suggestions_text(){
+    return theme('search_suggestions');
+}
+
+function wishary_search_results_ajax($search_keyword=NULL, $type = 'ajax') {
+   $suggestions =  wishary_search_suggestions($search_keyword);
+   $data =  wishary_search_results_retrieve($search_keyword);
+   if ($type == 'ajax'){
+        $commands = array();
+        $result = array(
+        'status' => 'ok',
+        'suggestions' => $suggestions,
+        'html' => $data,
+        );
+        drupal_json_output($result);
+    } else {
+        $output = $data;
+        return $output;
+    }
+}
+
+
+/**
+ * Implements hook_block_info().
+ */
+function wishary_search_block_info(){
+    $blocks = array();
+    $blocks['search_suggestions'] = array(
+        'info' => t('Search suggestions'),
+    );
+    $blocks['search_results'] = array(
+        'info' => t("Search Results"),
+    );
+    return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+
+function wishary_search_block_view($delta = '') {
+    $block = array();
+    switch ($delta) {
+        case 'search_suggestions':
+            $block['subject'] = '';
+            $block['content'] = wishary_search_suggestions();
+            break;
+        case 'search_results':
+          $block['subject'] = '';
+          $block['content'] = wishary_search_results_retrieve();
+          break;
+    }
+    return $block;
+}
+
+function wishary_search_suggestions($search_keyword=NULL) {
+    if(empty($search_keyword)) {
+        $search_keyword = arg(1);
+    }
+    module_load_include('inc', 'wishary_search', 'resources/wishary_search_resource');
+    $suggestions_list_array = _services_search_category_retrieve($search_keyword,'array');
+    $suggestions_list = array();
+    $i=0;
+    $index = array();
+    foreach($suggestions_list_array as $suggestions) {
+        if($suggestions['main_category']!=$suggestions_list[$i]['main_cat']){
+            $suggestions_list[$i]['main_cat'] = $suggestions['main_category'];
+            $suggestions_list[$i]['sub_cat'] = $suggestions['sub_category'];
+            $suggestions_list[$i]['color'] = $suggestions['color'];
+            $suggestions_list[$i]['brand'] = $suggestions['brand'];
+
+        }
+        $i++;
+    }
+    foreach ($suggestions_list as $key => $row) {
+        $distance[$key] = $row['main_cat'];
+    }
+
+    $suggestions_array = array();
+    if(!empty($suggestions_list)){
+        array_multisort($distance,SORT_ASC,$suggestions_list);
+        $firstcatname_tmp = array();
+        $nextcatname_tmp = array();
+
+        foreach ($suggestions_list as $key => $row) {
+            $hyphen_pos = stripos($row['main_cat'], " -");
+            if (!in_array(substr($row['main_cat'], 0, $hyphen_pos), $firstcatname_tmp)) {
+                $firstcatname[] = substr($row['main_cat'], 0, $hyphen_pos);
+                $firstcatname_tmp[] = substr($row['main_cat'], 0, $hyphen_pos);
+            }
+            if (!in_array(substr($row['main_cat'], $hyphen_pos+2), $nextcatname_tmp)) {
+                $nextcatname[] = substr($row['main_cat'], $hyphen_pos+2);
+                $nextcatname_tmp[] = substr($row['main_cat'], $hyphen_pos+2);
+            }
+
+            if(!empty($row['sub_cat'])){
+                array_push($suggestions_array,trim($row['sub_cat']));
+            }
+            if(!empty($row['color'])){
+                array_push($suggestions_array,trim($row['color']));
+            }
+            if(!empty($row['brand'])){
+                array_push($suggestions_array,trim($row['brand']));
+            }
+
+        }
+        foreach ($firstcatname as $key => $value) {
+            array_push($suggestions_array,trim($value));
+        }
+         foreach ($nextcatname as $key => $value) {
+            array_push($suggestions_array,trim($value));
+        }
+    }
+    /*if(empty($type)){
+        return $suggestions_array;
+    }else{*/
+        return theme('search_suggestions', array('suggestions'=>array_unique($suggestions_array)));
+    //}
+}
+
+function wishary_search_results_retrieve($search_keyword=NULL){
+    if(empty($search_keyword)) {
+        $search_keyword = arg(1);
+    }
+
+
+    module_load_include('inc', 'wishary_search', 'resources/wishary_search_resource');
+    $suggestions = array();
+    $results_list = array();
+    //$suggestions = wishary_search_suggestions($search_keyword,'ajax_type');
+    $results_list = _services_search_results($search_keyword,0,8,'array');
+    $output = '';
+    $results_list = pager_array_splice($results_list, 8);
+    /*$output .= theme('pager');
+    return theme('wishary_search_results', array('suggestions'=>array_unique($suggestions),'search_pager'=>$output,'wishary_search_results'=>$results_list));*/
+
+    /*$tmp_q = $_GET['q'];
+    $path = 'search_results/'.$search_keyword;
+    $_GET['q'] = $path;
+    //$output .= theme('pager');
+    $output = theme('wishary_search_results_retrieve', array('wishary_search_results'=>$results_list,'pager' =>theme('pager')));
+    $_GET['q'] = $tmp_q;
+    return $output;*/
+
+    /*$output = theme('wishary_search_results_retrieve', array('wishary_search_results'=>$results_list,'suggestions' => $suggestions));
+    $output .= theme('pager');
+    die ($output);*/
+
+    $output = theme('wishary_search_results_retrieve', array('wishary_search_results'=>$results_list,'pager' =>theme('pager')));
+    return $output;
+}
+
+/**
+* Implements of hook_services_resources().
+*/
+function wishary_search_services_resources() {
+	$resource = array(
+		'search' => array(
+			'operations' => array(
+				'index' => array(
+                    'help' => 'Searching the wishes',
+                    'file' => array('type' => 'inc', 'module' => 'wishary_search', 'name' => 'resources/wishary_search_resource'),
+                    'callback' => '_get_search_suggestions_results',
+                    'args' => array(
+                        array(
+                            'name' => 'term',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'term'),
+                            'type' => 'string',
+                            'description' => 'Keyword to be searched',
+                        ),
+                        array(
+                            'name' => 'type',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'type'),
+                            'type' => 'string',
+                            'description' => 'Type of search (Suggestons/results)',
+                        ),
+                        array(
+                            'name' => 'offset',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'offset'),
+                            'type' => 'int',
+                            'description' => 'start index',
+                        ),
+                        array(
+                            'name' => 'limit',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'limit'),
+                            'type' => 'int',
+                            'description' => 'limit index',
+                        ),
+                    ),
+                    'access callback' => '_search_access_provide_access',
+                    'access arguments' => array('view'),
+                    'access arguments append' => TRUE,
+                ),
+			),
+		),
+	);
+    return $resource;
+}
+
+/** * Access callback */
+function _search_access_provide_access() {
+  return TRUE;
+}
+
+/**
+ * An generic array pager for Drupal.
+ * For Drupal 5 and 6, the default limit is 10. For Drupal 7 it is 9.
+ */
+function pager_array_splice($data, $limit = 9, $element = 0) {
+  global $pager_page_array, $pager_total, $pager_total_items;
+  $page = isset($_GET['page']) ? $_GET['page'] : '';
+
+  // Convert comma-separated $page to an array, used by other functions.
+  $pager_page_array = explode(',', $page);
+
+  // We calculate the total of pages as ceil(items / limit).
+  $pager_total_items[$element] = count($data);
+  $pager_total[$element] = ceil($pager_total_items[$element] / $limit);
+  $pager_page_array[$element] = max(0, min((int)$pager_page_array[$element], ((int)$pager_total[$element]) - 1));
+  return array_slice($data, $pager_page_array[$element] * $limit, $limit, TRUE);
+}

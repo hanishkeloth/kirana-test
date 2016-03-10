@@ -1,0 +1,233 @@
+<?php
+/**
+* Implements of hook_services_resources().
+*/
+function services_nodeclone_services_resources() {
+    $resource = array(
+        'nodeclone' => array(
+            'operations' => array(
+                'retrieve' => array(
+                    'help' => 'Creating node clone',
+                    'callback' => '_services_node_resource_retrieve',
+                    'args' => array(
+                        array(
+                            'name' => 'nid',
+                            'optional' => FALSE,
+                            'source' => array('path' => '0'),
+                            'type' => 'int',
+                            'description' => 'The nid of the node to get',
+                        ),
+                    ),
+                    'access callback' => 'nodeclone_access_callback',
+                    'access arguments' => array('view'),
+                    'access arguments append' => FALSE,
+                ),
+                'create' => array(
+                    'file' => array('type' => 'inc', 'module' => 'services', 'name' => 'resources/node_resource'),
+                    'callback' => '_create_clone_node',
+                    'args' => array(
+                        array(
+                            'name' => 'node',
+                            'optional' => FALSE,
+                            'source' => 'data',
+                            'description' => 'The node data to create',
+                            'type' => 'array',
+                        ),
+                        array(
+                          'name' => 'user',
+                          'optional' => FALSE,
+                          'source' => 'data',
+                          'type' => 'array',
+                        ),
+                    ),
+                    'access callback' => 'nodeclone_access_callback',
+                    'access arguments' => array('create'),
+                    //'access arguments append' => TRUE,
+                ),
+
+            ),
+        ),
+		'notifications' => array(
+            'operations' => array(
+				'index' => array(
+                    'help' => 'Users Notifications',
+                    'callback' => '_services_user_notifications',
+                    'args' => array(
+                        array(
+                            'name' => 'uid',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'uid'),
+                            'type' => 'int',
+                            'description' => 'User Id',
+                        ),
+                    ),
+                    'access callback' => 'user_access',
+                    'access arguments' => array('access content'),
+                    'access arguments append' => FALSE,
+                ),
+            ),
+        ),
+        'foryou' => array(
+            'operations' => array(
+                'index' => array(
+                    'help' => 'For you wishes list',
+                    'file' => array('type' => 'module', 'module' => 'pp2'),
+                    'callback' => 'pp2_callback',
+                    'args' => array(
+                        array(
+                            'name' => 'offset',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'offset'),
+                            'type' => 'int',
+                            'description' => 'start index',
+                        ),
+                        array(
+                            'name' => 'limit',
+                            'optional' => FALSE,
+                            'source' => array('param' => 'limit'),
+                            'type' => 'int',
+                            'description' => 'limit index',
+                        ),
+                    ),
+                    'access callback' => 'nodeclone_access_callback',
+                    'access arguments' => array('view'),
+                    'access arguments append' => TRUE,
+                ),
+            ),
+        ),
+    );
+    return $resource;
+}
+
+function nodeclone_access_callback()
+{
+    if(user_is_logged_in()){
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+
+function _services_node_resource_retrieve($nid) {
+    global $user;
+    $node = node_load($nid);
+    if ($node) {
+        $new_node = clone $node;
+        $uri = entity_uri('node', $new_node);
+        $new_node->path = url($uri['path'], array('absolute' => TRUE));
+        // Unset uri as it has complete entity and this
+        // cause never ending recursion in rendering.
+        unset($new_node->uri);        
+        $new_node->nid = NULL;
+        $new_node->vid = NULL;
+        $new_node->uid = $user->uid;
+        $new_node->tnid = NULL;
+        $new_node->log = NULL;
+        $new_node->vuuid = NULL;
+        $new_node->created = NULL;
+        $new_node->path = NULL;
+        $new_node->files = array();
+        $new_node->ph_uid = $user->uid;
+		$new_node->ph_name = $user->name;
+		$new_node->pinboard_board = $node->ph_bname;
+		$new_node->name = $user->name;
+        $new_node->field_parent_nid['und'][0]['value'] = $node->nid;
+        if(isset($node->field_node_family['und'])){
+            $new_node->field_node_family['und'][0]['value'] = $node->field_node_family['und'][0]['value'];
+        }else{
+            $new_node->field_node_family['und'][0]['value'] = $node->nid."_".$node->uid;
+        }
+    }
+    return $new_node;
+}
+
+function _create_clone_node($parameters){
+    $resp = array();
+    if($parameters['node_clone']){
+        $node = $parameters['node_clone'];		
+        //global $user;
+        $user = $parameters['user'];
+		//$original_node = $parameters['original_node'];
+        // Adds backwards compatability with regression fixed in #1083242
+        $node = _services_arg_value($node, 'node');
+
+        if (!isset($node['name'])) {
+            // Assign username to the node from $user created at auth step.
+            if (isset($user['name'])) {
+                $node['name'] = $user['name'];
+                $node['uid'] = $user['uid'];
+            }
+        }
+        if(!isset($node['language'])) {
+            $node['language'] = LANGUAGE_NONE;
+        }
+        // Validate the node. If there is validation error Exception will be thrown
+        // so code below won't be executed.
+        _node_resource_validate_type($node);
+
+        // Load the required includes for drupal_form_submit
+        module_load_include('inc', 'node', 'node.pages');
+		
+        $node_type = $node['type'];
+        // Setup form_state
+        $form_state = array();
+        $form_state['values'] = $node;
+        $form_state['values']['op'] = variable_get('services_node_save_button_' . $node_type . '_resource_create', t('Save'));
+        $form_state['programmed_bypass_access_check'] = FALSE;
+
+		// Build a stub node object for the form in a similar way as node_add() does,
+        // but always make the node author default to the current user (if the user
+        // has permission to change it, $form_state['values'] will override this
+        // default when the form is submitted).
+        $stub_node = (object) array_intersect_key($node, array_flip(array('type', 'language')));
+		//$stub_node->name = $user->name;
+        $stub_node->name = $user['name'];
+		$stub_node->uid = $user['uid'];
+		$stub_node->pinboard_board = $node['ph_bname'];
+        
+        //return $stub_node;	
+        drupal_form_submit($node_type . '_node_form', $form_state, (object)$stub_node);
+		
+        if ($errors = form_get_errors()) {
+            return services_error(implode(" ", $errors), 406, array('form_errors' => $errors));
+        }
+        // Fetch $nid out of $form_state
+        $nid = $form_state['nid'];
+        // Only add the URI for servers that support it.
+        $node = array('nid' => $nid);
+        if ($uri = services_resource_uri(array('node', $nid))) {
+            $node['uri'] = $uri;
+        }
+        return $node;
+    }
+}
+
+function notifications_access_callback()
+{
+    return TRUE;
+}
+
+function _services_user_notifications($uid) {
+   module_load_include('module', 'push_notification', 'push_notification');
+   module_load_include('module', 'content_notification', 'content_notification');
+   $query = db_select('content_notification','cn')
+        ->fields('cn', array('notify_id','read_status','created','noty_message','entity_id','entity_type','sent_uid'))
+        ->condition('received_uid',$uid)
+        ->orderBy('created', 'DESC');
+    $result = $query->execute()->fetchAll();
+    $notifications = array();
+    $i=0;
+    foreach($result as $record){
+        $notifications[$i] = $record;
+		
+        if($record->entity_type == 'follow'){
+            $entity_id = $record->sent_uid;
+        }else{
+            $entity_id = $record->entity_id;
+        }
+        $notifications[$i]->image = _get_profile_content_images($record->entity_type, $entity_id);
+        $i++;       
+    }
+	$notifications_result = json_decode(json_encode($notifications),TRUE);
+    return drupal_json_output($notifications_result);
+}

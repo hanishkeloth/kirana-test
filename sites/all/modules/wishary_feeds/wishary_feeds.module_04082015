@@ -1,0 +1,763 @@
+<?php
+/**
+ * @file
+ * A block module that displays recent blog/article and wish.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function wishary_feeds_permission() {
+  return array(
+    'attach file to node' => array(
+      'title' => t('attach file to node'),
+      'description' => t('attach file to node - with services'),
+    ),
+    'attach file to wish' => array(
+      'title' => t('attach file to wish'),
+      'description' => t('attach file to node - with services'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_services_resources().
+ */
+function wishary_feeds_services_resources() {
+  $api = array(
+    'wishary_related' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Using GET to attach file to node - see this module help permissionm required',
+          'callback' => 'wishary_relevant_articles',
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to node'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'nid',
+              'type' => 'int',
+              'description' => 'Node Id',
+              'source' => array('param' => 'nid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'fid',
+              'type' => 'int',
+              'description' => 'File id fid',
+              'source' => array('param' => 'fid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'type',
+              'type' => 'string',
+              'description' => 'check if profile is true later on the custom mname of a field but does not work yet ',
+              'source' => array('param' => 'field'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+          ),
+        ),
+      ),
+    ),
+    'wishary_related_wish' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Using GET to attach file to node - see this module help permissionm required',
+          'callback' => 'wishary_relevant_wishes',
+          'access callback' => 'user_access',
+          'access arguments' => array('attach file to wish'),
+          'access arguments append' => FALSE,
+          'args' => array(
+            array(
+              'name' => 'fn',
+              'type' => 'string',
+              'description' => 'Function to perform',
+              'source' => array('path' => '0'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'nid',
+              'type' => 'int',
+              'description' => 'Node Id',
+              'source' => array('param' => 'nid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'fid',
+              'type' => 'int',
+              'description' => 'File id fid',
+              'source' => array('param' => 'fid'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+            array(
+              'name' => 'type',
+              'type' => 'string',
+              'description' => 'check if profile is true later on the custom mname of a field but does not work yet ',
+              'source' => array('param' => 'field'),
+              'optional' => TRUE,
+              'default' => '0',
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  return $api;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function wishary_feeds_menu() {
+  $items = array();
+
+  $items['wishary_feeds'] = array(
+    'title' => 'Wishary feeds',
+    'description' => 'wishary feeds list',
+    'page callback' => 'wishary_feed_list',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['wishary_relevant_articles'] = array(
+    'title' => 'Relevant articles',
+    'description' => 'relevant articles',
+    'page callback' => 'wishary_relevant_articles',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['wishary_relevant_wishes'] = array(
+    'title' => 'Relevant wishes',
+    'description' => 'relevant wishes',
+    'page callback' => 'wishary_relevant_wishes',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+
+  $items['relevant_articles_new'] = array(
+    'title' => 'Relevant wishes',
+    'description' => 'relevant wishes',
+    'page callback' => 'wishary_relevant_articles_new',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Collect the hashtags.
+ *
+ * Collect the wishes with tfidf value for each hashtags.
+ *
+ * Add the tfidf values of each wish and make a common array list.
+ */
+function wishary_feed_list($offset,$limit) {
+  global $user;
+
+  // Get the user's hashtags.
+  $query = db_select('flag', 'f');
+  $query->join('flagging', 'fg', 'fg.fid=f.fid');
+  $query->join('taxonomy_term_data', 'term', 'term.tid=fg.entity_id');
+  $query->addField('term', 'name');
+  $query->condition('f.name', 'hashtag', '=');
+  $query->condition('fg.uid', $user->uid, '=');
+
+  $hashtags_results = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+  $hashtags = array();
+
+  foreach ($hashtags_results as $hashtag) {
+    array_push($hashtags, $hashtag['name']);
+  }
+
+  //$hashtags = array('jacket','denim');
+  if (!empty($hashtags)) {
+    $sum_of_tfidf_of_wishes = foryou_get_tfidf($hashtags,$offset,$limit);
+
+    // Add quota to wishes for friends.
+    $friend_quota  = (10 / 100) * max($sum_of_tfidf_of_wishes);
+
+    $friends_wish_list = get_wishes_of_friends($user->uid);
+
+    $wishes_result = array_intersect_key($sum_of_tfidf_of_wishes, $friends_wish_list);
+
+    foreach ($wishes_result as $key => $wish) {
+      $sum_of_tfidf_of_wishes[$key] += $friend_quota;
+    }
+
+    // Add quota to wishes for likes.
+    $like_quota  = (1 / 100) * max($sum_of_tfidf_of_wishes);
+    $wishes_with_likes = get_likes_of_wishes(array_keys($sum_of_tfidf_of_wishes));
+
+    foreach ($wishes_with_likes as $like_wish) {
+      $sum_of_tfidf_of_wishes[$like_wish['entity_id']] += ($like_quota * $like_wish['likes']);
+    }
+
+    arsort($sum_of_tfidf_of_wishes);
+
+    $foryou_wishes_list = array();
+    $i = 0;
+
+    foreach ($sum_of_tfidf_of_wishes as $foryou_wishes => $tfidf) {
+      $foryou_wishes_list[$i] = json_encode($foryou_wishes);
+      $i++;
+    }
+shuffle($foryou_wishes_list);
+    return $foryou_wishes_list;
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Get the wishids created by the FB friends of the user from the wishid's list.
+ */
+function get_wishes_of_friends($user_id) {
+
+  $friends_wish_list = array();
+
+  $friends_lists = db_select('fboauth_friends', 'friends')
+                        ->fields('friends', array('fbid'))
+                        ->condition('friends.uid', $user_id, '=')
+                        ->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+  $friends_lists_array = '';
+
+  if (!empty($friends_lists)) {
+    foreach ($friends_lists as $friends_list) {
+      $friends_lists_array .= $friends_list['fbid'] . ",";
+    }
+  }
+
+  if (!empty($friends_lists_array)) {
+    $friends_lists_array = rtrim($friends_lists_array, ",");
+
+    $query = db_select('node', 'node');
+    $query->join('fboauth_users', 'fb_user', 'fb_user.uid=node.uid');
+    $query->fields('node', array('nid'));
+    $query->condition('fb_user.fbid', array($friends_lists_array), 'IN');
+    $friends_wish_results = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($friends_wish_results)) {
+      foreach ($friends_wish_results as $friends_wish) {
+        $friends_wish_list[$friends_wish['nid']] = $friends_wish['nid'];
+      }
+    }
+  }
+
+  return $friends_wish_list;
+}
+
+/**
+ * Get the likes of the wishes.
+ */
+function get_likes_of_wishes($wishes) {
+  $likes_of_wishes = [];
+
+  $query = db_select('votingapi_vote', 'vote')
+            ->fields('vote', array('entity_id'))
+            ->condition('vote.entity_id', $wishes, 'IN')
+            ->groupBy('vote.entity_id');
+
+  $query->addExpression('COUNT(vote.entity_id)', 'likes');
+
+  $likes_of_wishes = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+  return $likes_of_wishes;
+}
+
+/**
+ * Get the relevent articles.
+ */
+function wishary_relevant_articles($fn, $nid, $fid, $field) {
+  $array = array();
+
+  // Check for mad values.
+  $nid = intval($nid);
+  $fid = intval($fid);
+  $node = node_load($nid);
+  $body = field_get_items('node', $node, 'body');
+  $title_hashtags = $body[0]['value'];
+
+  // Get current wish's description.
+  $title_hashtags = explode(' ', str_replace(['#', '_'], ['', ' '], $title_hashtags));
+
+  $title_hashtags = array_values(array_unique($title_hashtags));
+  $json_wish_ids = [];
+
+  if (!empty($title_hashtags)) {
+    $sum_of_tfidf_of_wishes = get_tfidf($title_hashtags, ['article']);
+
+    arsort($sum_of_tfidf_of_wishes);
+
+    foreach ($sum_of_tfidf_of_wishes as $wish_id => $value) {
+      if ($nid != $wish_id) {
+        $json_wish_ids[]['entity_id'] = $wish_id;
+      }
+    }
+
+    return $json_wish_ids;
+  }
+  //New logic for displaying both wishary articles and curated articles
+ /*$nid = intval($nid);
+ $node = node_load($nid);
+ $json_wish_ids = [];
+ if($node->type == 'blog'){
+    //$tags_text = $node->field_tag_blog['und'][0]['entity']->name;
+    $blog_tags = $node->field_tag_blog['und'];
+    $tags_text = '';
+    foreach ($blog_tags as $tags => $value) {
+      $tags_text.=$tags_text." ".$value['entity']->name;
+    }
+  }else {
+    $tags_text = $node->body['und'][0]['value'];
+  }
+  if(!empty($tags_text)){
+    $tags_text = str_replace(['_'], [' '], $tags_text);
+
+    $tags = _extract_common_words($tags_text);
+    //print_r($tags);
+
+    $keywords = implode("+",$tags);
+    $blogs_list = _wishes_related_articles_($keywords,0,5);
+    //echo "<pre>";print_r($blogs_list);
+    arsort($blogs_list);
+
+    foreach ($blogs_list as $wish_id) {
+      if ($nid != $wish_id) {
+        $json_wish_ids[]['entity_id'] = intval($wish_id);
+      }
+    }
+    return $json_wish_ids;
+  }*/
+}
+
+/**
+ * Get the relevant wishes.
+ */
+function wishary_relevant_wishes($fn, $nid, $fid, $field) {
+  $array = array();
+
+  // Check for mad values.
+  $nid = intval($nid);
+  $fid = intval($fid);
+  $node = node_load($nid);
+  $body = field_get_items('node', $node, 'body');
+  $title_hashtags = $body[0]['value'];
+  // Get current wish's description.
+  $title_hashtags = explode(' ', str_replace(['#', '_'], ['', ' '], $title_hashtags));
+
+  $title_hashtags = array_values(array_unique($title_hashtags));
+  $json_wish_ids = [];
+
+  if (!empty($title_hashtags)) {
+    $sum_of_tfidf_of_wishes = get_tfidf($title_hashtags, ['pin']);
+
+    arsort($sum_of_tfidf_of_wishes);
+
+    foreach ($sum_of_tfidf_of_wishes as $wish_id => $value) {
+      if ($nid != $wish_id) {
+        $json_wish_ids[] = $wish_id;
+      }
+    }
+  }
+
+  return $json_wish_ids;
+}
+
+/**
+ * Common function to get the tfidf values.
+ */
+function ____get_tfidf($hashtags, $bundles) {
+  $sum_of_tfidf_of_wishes = [];
+
+  if (in_array("article", $bundles)) {
+    $body_value = "CONCAT(n.title, ' ',  f.body_value) AS body_value";
+  }
+  else {
+    $body_value = "f.body_value AS body_value";
+  }
+
+  $term_frequencies = [];
+  $term_frequencie_where = [];
+
+  foreach ($hashtags as $hashtag) {
+    if (empty($hashtag)) {
+      continue;
+    }
+
+    $term_frequencies[] = "ROUND((
+                    LENGTH(body_value)
+                    - LENGTH( REPLACE ( lower(f.body_value), lower('" . $hashtag . "'), '') )
+                ) / LENGTH('" . $hashtag . "') )";
+    $term_frequencie_where[] = "(f.body_value LIKE '%" . $hashtag . "%')";
+  }
+
+  $term_frequencies_str = implode('+', $term_frequencies);
+  $term_frequencie_where_str = implode(' AND ', $term_frequencie_where);
+
+  $query = "SELECT ff.entity_id as entity_id,
+    ff.body_value AS body_value, ff.termFrequency AS termFrequency,
+    ff.wordCount AS wordCount, termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf, ff.created
+  FROM
+  (SELECT f.entity_id AS entity_id, {$body_value}, ({$term_frequencies_str}) AS termFrequency,
+                LENGTH(f.body_value) - LENGTH(REPLACE(f.body_value, ' ', '')) + 1 AS wordCount, n.created
+  FROM
+  field_data_body f, node n
+  WHERE  f.bundle IN ('" . implode("','", $bundles) . "')
+    AND f.body_value REGEXP '(#|[[:blank:]]|^)" . $hashtag . "([[:blank:]]|$)'
+  AND n.nid = f.entity_id
+  AND {$term_frequencie_where_str}
+   ) ff
+  ORDER BY tfidf DESC, created DESC";
+
+  $result = db_query($query);
+
+  $records = $result->fetchAll();
+
+  foreach ($records as $record) {
+    if ($record->tfidf) {
+      if (isset($sum_of_tfidf_of_wishes[$record->entity_id])) {
+        $sum_of_tfidf_of_wishes[$record->entity_id] += $record->tfidf;
+      }
+      else {
+        $sum_of_tfidf_of_wishes[$record->entity_id] = $record->tfidf;
+      }
+    }
+  }
+
+  return $sum_of_tfidf_of_wishes;
+}
+
+/**
+ * Function to get the tfidf value for you.
+ */
+function foryou_get_tfidf($hashtags,$offset,$limit) {
+  $sum_of_tfidf_of_wishes = [];
+
+
+    $body_value = "f.body_value AS body_value";
+
+
+  $term_frequencies = [];
+  $term_frequencie_where = [];
+
+  foreach ($hashtags as $hashtag) {
+    if (empty($hashtag)) {
+      continue;
+    }
+    $hashtag = str_replace('#','',$hashtag);
+    $term_frequencies[] = "ROUND((
+                    LENGTH(body_value)
+                    - LENGTH( REPLACE ( lower(f.body_value), lower('" . $hashtag . "'), '') )
+                ) / LENGTH('" . $hashtag . "') )";
+    $term_frequencie_where[] = "f.body_value LIKE '%" . $hashtag . "%'";
+  }
+
+  $term_frequencies_str = implode('+', $term_frequencies);
+  $term_frequencie_where_str = '(' . implode(' OR ', $term_frequencie_where) . ')';
+
+  $query = "SELECT ff.entity_id as entity_id,
+    ff.body_value AS body_value, ff.termFrequency AS termFrequency,
+    ff.wordCount AS wordCount, termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf, ff.created
+  FROM
+  (SELECT f.entity_id AS entity_id, {$body_value}, ({$term_frequencies_str}) AS termFrequency,
+                LENGTH(f.body_value) - LENGTH(REPLACE(f.body_value, ' ', '')) + 1 AS wordCount, n.created
+  FROM
+  field_data_body f, node n
+  WHERE  f.bundle = 'pin'
+  AND n.nid = f.entity_id
+  AND {$term_frequencie_where_str}
+   ) ff
+  ORDER BY tfidf DESC, created DESC LIMIT $offset, $limit";
+  //echo $query;
+  $result = db_query($query);
+
+  $records = $result->fetchAll();
+
+  foreach ($records as $record) {
+    if ($record->tfidf) {
+      if (isset($sum_of_tfidf_of_wishes[$record->entity_id])) {
+        $sum_of_tfidf_of_wishes[$record->entity_id] += $record->tfidf;
+      }
+      else {
+        $sum_of_tfidf_of_wishes[$record->entity_id] = $record->tfidf;
+      }
+    }
+  }
+
+  return $sum_of_tfidf_of_wishes;
+}
+
+/**
+ * Get tfidfs for you.
+ */
+function ____foryou_get_tfidf($hashtags) {
+  $sum_of_tfidf_of_wishes = [];
+
+  foreach ($hashtags as $hashtag) {
+    $result = db_query("SELECT ff.entity_id as entity_id,
+      ff.body_value AS body_value, ff.termFrequency AS termFrequency,
+      ff.wordCount AS wordCount, termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf, ff.created
+    FROM
+    (SELECT f.entity_id AS entity_id, f.body_value AS body_value, ROUND((
+                      LENGTH(body_value)
+                      - LENGTH( REPLACE ( lower(f.body_value), lower('" . $hashtag . "'), '') )
+                  ) / LENGTH('" . $hashtag . "') ) AS termFrequency,
+                  LENGTH(f.body_value) - LENGTH(REPLACE(f.body_value, ' ', '')) + 1 AS wordCount, n.created
+    FROM
+    field_data_body f, node n
+    WHERE  (f.bundle = 'pin') AND (f.body_value REGEXP '(#|[[:blank:]]|^)" . $hashtag . "([[:blank:]]|$)')
+    AND n.nid = f.entity_id
+     ) ff
+    ORDER BY tfidf DESC, created DESC");
+
+    $records = $result->fetchAll();
+
+    foreach ($records as $record) {
+      if (isset($sum_of_tfidf_of_wishes[$record->entity_id])) {
+        $sum_of_tfidf_of_wishes[$record->entity_id] += $record->tfidf;
+      }
+      else {
+        $sum_of_tfidf_of_wishes[$record->entity_id] = $record->tfidf;
+      }
+    }
+  }
+
+  return $sum_of_tfidf_of_wishes;
+}
+
+/**
+ * Function with term frequency quota.
+ */
+function get_tfidf($hashtags, $bundles) {
+  $sum_of_tfidf_of_wishes = [];
+  $max_tfidf = -100;
+
+  if (in_array("article", $bundles)) {
+    $body_value = "CONCAT(n.title, ' ',  f.body_value) AS body_value";
+  }
+  else {
+    $body_value = "f.body_value AS body_value";
+  }
+
+  foreach ($hashtags as $hashtag) {
+    $result = db_query("SELECT ff.entity_id as entity_id,
+      ff.body_value AS body_value, ff.termFrequency AS termFrequency,
+      ff.wordCount AS wordCount, termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf, ff.created
+    FROM
+    (SELECT f.entity_id AS entity_id, {$body_value}, ROUND((
+                      LENGTH(body_value)
+                      - LENGTH( REPLACE ( lower(f.body_value), lower('" . $hashtag . "'), '') )
+                  ) / LENGTH('" . $hashtag . "') ) AS termFrequency,
+                  LENGTH(f.body_value) - LENGTH(REPLACE(f.body_value, ' ', '')) + 1 AS wordCount, n.created
+    FROM
+    field_data_body f, node n
+    WHERE  f.bundle IN ('" . implode("','", $bundles) . "')
+      AND f.body_value REGEXP '(#|[[:blank:]]|^)" . $hashtag . "([[:blank:]]|$)'
+    AND n.nid = f.entity_id
+     ) ff
+    ORDER BY tfidf DESC, created DESC");
+
+    $records = $result->fetchAll();
+
+    foreach ($records as $record) {
+      if ($record->tfidf) {
+        if ($record->tfidf > $max_tfidf) {
+          $max_tfidf = $record->tfidf;
+        }
+
+        if ($record->termFrequency) {
+          if (isset($sum_of_tfidf_of_wishes[$record->entity_id]['tf_repeat'])) {
+            $sum_of_tfidf_of_wishes[$record->entity_id]['tf_repeat'] += 1;
+          }
+          else {
+            $sum_of_tfidf_of_wishes[$record->entity_id]['tf_repeat'] = 1;
+          }
+        }
+        else {
+          $sum_of_tfidf_of_wishes[$record->entity_id]['tf_repeat'] = 0;
+        }
+
+        if (isset($sum_of_tfidf_of_wishes[$record->entity_id]['tfidf'])) {
+          $sum_of_tfidf_of_wishes[$record->entity_id]['tfidf'] += $record->tfidf;
+        }
+        else {
+          $sum_of_tfidf_of_wishes[$record->entity_id]['tfidf'] = $record->tfidf;
+        }
+      }
+    }
+  }
+
+  // Quota added to each wish, if it has matching hashtag.
+  $term_frequency_quota = (5 / 100) * $max_tfidf;
+
+  $temp_sum_of_tfidf_of_wishes = $sum_of_tfidf_of_wishes;
+  unset($sum_of_tfidf_of_wishes);
+  $sum_of_tfidf_of_wishes = [];
+
+  foreach ($temp_sum_of_tfidf_of_wishes as $entity_id => $tfidf) {
+    $sum_of_tfidf_of_wishes[$entity_id] = $tfidf['tfidf']
+      + ($tfidf['tf_repeat'] * $term_frequency_quota);
+  }
+
+  return $sum_of_tfidf_of_wishes;
+}
+
+
+/**
+ * Get the relevent articles.
+ */
+function wishary_relevant_articles_new() {
+ $nid = arg(1);
+ $node = node_load($nid);
+ $json_wish_ids = [];
+ if($node->type == 'blog'){
+    //$tags_text = $node->field_tag_blog['und'][0]['entity']->name;
+    $blog_tags = $node->field_tag_blog['und'];
+    $tags_text = '';
+    foreach ($blog_tags as $tags => $value) {
+      $tags_text.=$tags_text." ".$value['entity']->name;
+    }
+  }else {
+    $tags_text = $node->body['und'][0]['value'];
+  }
+  if(!empty($tags_text)){
+    $tags_text = str_replace(['_'], [' '], $tags_text);
+
+    $tags = _extract_common_words($tags_text);
+    //print_r($tags);
+
+    $keywords = implode("+",$tags);
+    $blogs_list = _wishes_related_articles_($keywords,0,5);
+    //echo "<pre>";print_r($blogs_list);
+    arsort($blogs_list);
+
+    foreach ($blogs_list as $wish_id) {
+      if ($nid != $wish_id) {
+        $json_wish_ids[]['entity_id'] = intval($wish_id);
+      }
+    }
+    drupal_json_output($json_wish_ids);
+    exit();
+    //return $json_wish_ids;
+  }
+}
+
+function _wishes_related_articles_($search_word=NULL){
+  $search_tags = explode("+", $search_word);
+  $search_tags = array_values(array_unique($search_tags));
+  //$search_tags = ['Wishary', 'brand'];
+  $w_term_frequencies = [];
+  $w_word_count = [];
+  $a_term_frequencies = [];
+  $w_term_frequencie_or = [];
+  $w_term_frequencie_where = [];
+  $a_term_frequencie_where = [];
+
+  foreach ($search_tags as $tag) {
+    foreach (['TD.tags', 'FB.field_blog_body_value', 'FT.title_field_value'] as $table_name) {
+      $w_term_frequencies[] = "ROUND((
+        LENGTH({$table_name}) - LENGTH( REPLACE ( lower({$table_name}),
+          lower('" . $tag . "'), ''))
+        ) / LENGTH('" . $tag . "') )";
+    }
+
+    $a_term_frequencies[] = "ROUND((
+      LENGTH(DT.title_field_value) - LENGTH( REPLACE ( lower(DT.title_field_value),
+        lower('" . $tag . "'), ''))
+      ) / LENGTH('" . $tag . "') )";
+
+    $w_term_frequencie_where[] = "TD.tags LIKE '%" . $tag . "%'";
+    $a_term_frequencie_where[] = "DT.title_field_value LIKE '%" . $tag . "%'";
+  }
+
+  foreach (['TD.tags', 'FB.field_blog_body_value', 'FT.title_field_value'] as $table_name) {
+    $w_word_count[] = "LENGTH({$table_name}) - LENGTH(REPLACE({$table_name}, ' ', '')) + 1";
+  }
+
+  $w_term_frequencies_str = implode('+', $w_term_frequencies);
+  $w_word_count_str = implode('+', $w_word_count);
+  $a_term_frequencies_str = implode('+', $a_term_frequencies);
+  $w_term_frequencie_where_str = implode(' OR ', $w_term_frequencie_where);
+  $a_term_frequencie_where_str = implode(' OR ', $a_term_frequencie_where);
+
+  $results_query = "SELECT
+      ff.entity_id as entity_id,
+      ff.title AS title,
+      ff.termFrequency AS termFrequency,
+      ff.wordCount AS wordCount,
+      termFrequency * LOG(wordCount / termFrequency, 2) AS tfidf,
+      ff.created, ff.wblog
+    FROM (
+      SELECT FD.entity_id, CONCAT(TD.tags, ' ',  FB.field_blog_body_value, ' ', FT.title_field_value) AS title, n.created,
+        ({$w_term_frequencies_str}) AS termFrequency,
+        ({$w_word_count_str}) AS wordCount, 1 as wblog
+      FROM field_data_field_tag_blog FD
+        JOIN (
+          SELECT FD.entity_id, GROUP_CONCAT( CONCAT( TD1.name) SEPARATOR ' ') AS tags, TD1.tid
+          FROM field_data_field_tag_blog FD
+              JOIN taxonomy_term_data TD1
+                ON FD.field_tag_blog_tid = TD1.tid
+          GROUP BY (FD.entity_id)
+        ) AS TD
+          ON FD.field_tag_blog_tid = TD.tid and FD.entity_id = TD.entity_id
+        JOIN field_data_field_blog_body FB
+          ON FD.entity_id = FB.entity_id
+        JOIN field_data_title_field FT
+          ON FD.entity_id = FT.entity_id
+            AND FT.bundle = 'blog'
+        JOIN node n
+          ON FD.entity_id = n.nid
+      WHERE ({$w_term_frequencie_where_str})
+      UNION
+      SELECT DT.entity_id, DT.title_field_value as title, n.created,
+        ({$a_term_frequencies_str}) AS termFrequency,
+        LENGTH(DT.title_field_value) - LENGTH(REPLACE(DT.title_field_value, ' ', '')) + 1 AS wordCount, 0 as wblog
+      FROM   field_data_title_field DT, node n
+      WHERE  DT.entity_id = n.nid
+        AND DT.bundle = 'article'
+        AND ({$a_term_frequencie_where_str})
+    ) ff  ORDER BY tfidf DESC, created DESC ";
+
+  $result = db_query($results_query);
+
+  $records = $result->fetchAll(PDO::FETCH_ASSOC);
+
+  $w_entity_ids = $a_entity_ids = [];
+
+  foreach ($records as $record) {
+    if ($record['wblog'] == 1) {
+      $w_entity_ids[] = $record['entity_id'];
+    }
+    else {
+      $a_entity_ids[] = $record['entity_id'];
+    }
+  }
+
+  $entity_ids = array_merge($w_entity_ids, $a_entity_ids);
+  $blogs_results_list = array();
+  foreach ($entity_ids as $entity_id=>$record) {
+   $blogs_results_list[$record] = $record;
+  }
+  return $blogs_results_list;
+}

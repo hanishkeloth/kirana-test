@@ -1,0 +1,331 @@
+<?php
+/**
+ * @file
+ * Account mail module.
+ *
+ * Provides a Form API element and a field API widget to edit the mail field
+ * for Drupal user accounts.
+ */
+
+
+// Field API widget: use UID from the entity's owner.
+define('ACCOUNT_MAIL__USE_ENTITY_UID', 'use_entity_uid');
+
+// Field API widget: use UID from the current user.
+define('ACCOUNT_MAIL__USE_CURRENT_USER', 'use_current_user');
+
+// Field API widget: hard-code a user UID.
+define('ACCOUNT_MAIL__USE_CUSTOM_UID', 'use_custom_uid');
+
+/**
+ * Implements hook_element_info().
+ */
+function account_mail_element_info() {
+  return array(
+    // Account mail field.
+    // 
+    // Example usage:
+    // global $user;
+    // $form['mail'] = array(
+    //   '#type' => 'account_mail',
+    //   '#label' => 'Email address',
+    //   '#uid' => $user->uid,
+    // );
+    'account_mail' => array(
+      '#input' => TRUE,
+      '#maxlength' => EMAIL_MAX_LENGTH,
+      '#autocomplete_path' => FALSE, 
+      '#process' => array('account_mail_elementprocess', 'ajax_process_form'),
+      '#element_validate' => array('account_mail_validate'),
+      // '#submit' => array('account_mail_submit'),
+      '#theme' => 'textfield', 
+      '#theme_wrappers' => array('form_element'),
+      '#uid' => NULL,
+      // By default, use the UID of the current user.
+      // Providing a UID overrides this setting.
+      '#uid_from_current_user' => TRUE,
+      '#value_callback' => 'account_mail_value_callback',
+    ),
+  );
+}
+
+function account_mail_value_callback($element, $input = FALSE, $form_state) {
+  
+}
+
+/**
+ * Process function for the FAPI account mail field.
+ * Looks up the email address for the #uid property.
+ */
+function account_mail_elementprocess($element, $form_state, &$complete_form) {
+
+  // Fallback: default the value to an empty string.
+  $default_value = '';
+
+
+  // The UID can originate from:
+  // - The current user's uid.
+  // - Hard-coded by the element's #uid property.
+  // - The UID of the entity's owner (when used with field API).
+
+  // UID is hard-coded by the element.
+  if (!empty($element['#uid'])) {
+    // Providing a UID in the element overrides the #uid_from_current_user
+    // setting.
+    $element['#uid_from_current_user'] = FALSE;
+    if ($account = user_load($element['#uid'])) {
+      $default_value = $account->mail;
+    }
+    else {
+      // If the account's not valid, remove the UID.
+      $element['#uid'] = NULL;
+    }
+  }
+  // Load the UID from the current user's account.
+  elseif ($element['#uid_from_current_user']) {
+    global $user;
+    if ($user->uid) {
+      $default_value = $user->mail;
+      $element['#uid'] = $user->uid;
+    }
+    else {
+      // If the account's not valid (or is the anonymous user), remove the UID.
+      $element['#uid'] = NULL;
+    }
+  }
+
+
+  // Populate the element's default value.
+  if (empty($element['#value'])) {
+    $element['#value'] = $default_value;
+  }
+
+
+  // UIDs are attached to elements, but the submit-handler is attached to the
+  // form.
+  // Add a reference for each of the elements to the form.
+  $complete_form['#account_mail'][] = &$element;
+
+  // Hack a submit-handler onto the form.
+  $complete_form['#submit'][] = 'account_mail_submit';
+
+  return $element;
+}
+
+/**
+ * Validation function for the FAPI account mail field.
+ * Implements the same validation as the mail field on the account-edit page.
+ */
+function account_mail_validate($element, $form_state) {
+  $mail = $element['#value'];
+
+  // By this point, #process should have forced a #uid property.
+  $uid = $element['#uid'];
+
+  // Validate the e-mail address, and check if it is taken by an existing user.
+  if ($error = user_validate_mail($mail)) {
+    form_set_error($element['#name'], $error);
+  }
+  elseif ((bool) db_select('users')->fields('users', array('uid'))->condition('uid', $uid, '<>')->condition('mail', db_like($mail), 'LIKE')->range(0, 1)->execute()->fetchField()) {
+    // Format error message dependent on whether the user is logged in or not.
+    if ($GLOBALS['user']->uid) {
+      form_set_error('mail', t('The e-mail address %email is already taken.', array('%email' => $mail)));
+    }
+    else {
+      form_set_error('mail', t('The e-mail address %email is already registered. <a href="@password">Have you forgotten your password?</a>', array('%email' => $mail, '@password' => url('user/password'))));
+    }
+  }
+}
+
+/**
+ * Submit function which saves data for the account_mail fields.
+ * Note that this receives the submit data for the *entire* form, not just the
+ * account mail fields.
+ */
+function account_mail_submit($form, $form_state) {
+  // Multiple account-mail form elements can be added to a form.
+  // The UID is attached to the original form in the element's #process stage.
+  // Iterate each instance.
+  foreach ($form['#account_mail'] as $field) {
+    // Get the UID from the field data.
+    $uid = $field['#uid'];
+    
+    // Get the new email address from the submitted form values.
+    $new_email_address = drupal_array_get_nested_value($form_state['values'], $field['#parents'], $key_found);
+
+    // Hack to handle Field API submissions, where $form_state['values']
+    // doesn't contain the submitted value.
+    // If all that's there is an "add_more" link, try the $form_state['input'].
+    if ($new_email_address == array('add_more' => FALSE)) {
+      $new_email_address = drupal_array_get_nested_value($form_state['input'], $field['#parents'], $key_found);
+    }
+
+    if ($key_found) {
+      $account = user_load($uid);
+      $edit = array('mail' => $new_email_address);
+      user_save($account, $edit);
+    }
+  }
+}
+
+
+
+
+
+
+
+
+/**
+ * Implements hook_field_info().
+ */
+function account_mail_field_info() {
+  return array(
+    'account_mail_field' => array(
+      'label' => t('Account mail'),
+      'description' => t('Email address.'),
+      'settings' => array(),
+      'instance_settings' => array(),
+      'default_widget' => 'account_mail_field',
+      'default_formatter' => 'account_mail_default',
+      // // Support hook_entity_property_info() from contrib "Entity API".
+      // 'property_type' => 'field_item_link',
+      // 'property_callbacks' => array('link_field_property_info_callback'),
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_field_widget_info().
+ */
+function account_mail_field_widget_info() {
+  return array(
+    'account_mail_field' => array(
+      'label' => 'Account mail',
+      'field types' => array('account_mail_field'),
+      'behaviors' => array(
+         'multiple values' => FIELD_BEHAVIOR_CUSTOM,
+         'default value' => FIELD_BEHAVIOR_NONE,
+      ),
+      'cardinality' => 1,
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * @see field_ui_field_edit_form
+ */
+function account_mail_form_field_ui_field_edit_form_alter(&$form) {
+  // Check the this is the field_ui_field_edit_form for an account_mail field.
+  if ($form['#field']['type'] == 'account_mail_field') {
+    // Remove the cardinality option: you can only have 1 instance of a
+    // mail_account field at a time.
+    $form['field']['cardinality']['#options'] = array(1 => 1);
+    $form['field']['cardinality']['#description'] = t('Only 1 value can be stored for an account_mail field.');
+  }
+}
+
+/**
+ * Implements hook_field_widget_settings_form().
+ * Configure an instance of an account_mail widget.
+ */
+function account_mail_field_widget_settings_form($field, $instance) {
+  $widget = $instance['widget'];
+  $settings = $widget['settings']['account_mail'];
+
+  $form['#attached']['js'][] = drupal_get_path('module', 'account_mail') . '/account_mail.admin.js';
+  drupal_add_js(drupal_get_path('module', 'account_mail') . '/account_mail.admin.js');
+  drupal_add_css(drupal_get_path('module', 'account_mail') . '/account_mail.admin.css');
+
+  // Use a wrapper element to ensure the source, and the UID is always grouped.
+  $form['account_mail'] = array();
+  $form['account_mail']['uid_source'] = array(
+    '#type' => 'radios',
+    '#title' => t('User ID source'),
+    '#options' => array(
+      ACCOUNT_MAIL__USE_ENTITY_UID => t('UID of entity owner'),
+      ACCOUNT_MAIL__USE_CURRENT_USER => t('UID of current user'),
+      ACCOUNT_MAIL__USE_CUSTOM_UID => t('Enter UID'),
+    ),
+    '#default_value' => $settings['uid_source'],
+    '#required' => TRUE,
+  );
+  $form['account_mail']['uid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('User ID'),
+    '#default_value' => $settings['uid'],
+  );
+
+  return $form;
+}
+
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function account_mail_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $entity = $element['#entity'];
+  $settings = $instance['widget']['settings']['account_mail'];
+
+  // Use hook_entity_info to work out if this field is used in creating a new
+  // entity, or updating an existing one.
+  $entity_info = entity_get_info($element['#entity_type']);
+  $key = $entity_info['entity keys']['id'];
+  $is_new = !array_key_exists($key, $entity);
+
+
+
+  // The UID depends on the widget settings.
+  $uid = NULL;
+  if ($settings['uid_source'] == ACCOUNT_MAIL__USE_CUSTOM_UID && !empty($settings['uid'])) {
+    $uid = $settings['uid'];
+  }
+  elseif ($settings['uid_source'] == ACCOUNT_MAIL__USE_CURRENT_USER) {
+    global $user;
+    $uid = $user->uid;
+  }
+  // Only add the entity owner's UID if it's an existing entity.
+  elseif ($settings['uid_source'] == ACCOUNT_MAIL__USE_ENTITY_UID && !$is_new) {
+    $uid = $entity->uid;
+  }
+
+  $element += array(
+    '#type' => 'account_mail',
+    // Provide the relevant UID, so the form element will load the correct
+    // email address as a default value.
+    '#uid' => $uid,
+    // Setting #uid_use_current_user means that the current user's email
+    // address will not be used, even though uid is not known (e.g. adding a
+    // new entity).
+    '#uid_from_current_user' => ($settings['uid_source'] == ACCOUNT_MAIL__USE_CURRENT_USER),
+  );
+
+  // There is no 'Add more' button, so surpress the error message by providing
+  // a dummy button.
+  $element += array(
+    'add_more' => array(
+      '#type' => 'value',
+      '#value' => FALSE,
+    ),
+  );
+  return $element;
+}
+// 
+// /**
+//  * Implements hook_field_storage_info().
+//  * Adds a dummy storage backend, so that account-mail data is stored in the
+//  * users.mail column, rather than as a field.
+//  */
+// function account_mail_field_storage_info() {
+//   return array(
+//      'account_mail_dummy_storage' => array(
+//        'label' => t('Dummy storage'), 
+//        'description' => t("Doesn't store field data at all; data-storage is delegated to the form element, which stores the data in the users.mail column."), 
+//        'settings' => array(),
+//      ),
+//    );
+// }
+// 
+// 
+// 

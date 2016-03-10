@@ -1,0 +1,49 @@
+<?php
+/**
+ * @file
+ * Install & uninstall functions for Auto Recommendations.
+ */
+
+/**
+ * Implementation of hook_schema().
+ */
+
+function ars_schema(){
+  $schema['ars_tracking'] = array(
+    'description' => 'Tracking of ARS frequency of request sent and response status',
+    'fields' => array(
+        'tracking_id' => array(
+            'description' => 'The primary identifier for ars tracking.',
+            'type' => 'serial',
+            'unsigned' => TRUE,
+            'not null' => TRUE,
+        ),
+        'entity_id' => array(
+            'description' => 'Node Id',
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => FALSE,
+        ),
+        'frequency_no' => array(
+            'description' => 'No.of frequency request sent',
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => FALSE,
+        ),
+        'next_schedule' => array(
+            'description' => 'Timestamp when next request should be sent',
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => FALSE,
+        ),
+        'item_status' => array(
+            'description' => 'Status of the items receieved (0-failure/1-Success)',
+            'type' => 'int',
+            'unsigned' => TRUE,
+            'not null' => FALSE,
+        ),
+    ),
+    'primary key' => array('tracking_id'),
+  );
+  return $schema;
+}

@@ -1,0 +1,12 @@
+name = Birthdays defaults
+description = A default view, default field on user profiles and a default action for the Birthdays module.
+dependencies[] = birthdays
+core = 7.x
+package = Fields
+
+; Information added by Drupal.org packaging script on 2014-05-05
+version = "7.x-1.0-beta1+49-dev"
+core = "7.x"
+project = "birthdays"
+datestamp = "1399293229"
+

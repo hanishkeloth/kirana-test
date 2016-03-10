@@ -1,0 +1,227 @@
+<?php
+/**
+ * @file
+ * Provide hooks for feeds_tamper_file_fetcher.
+ *
+ * As well as the plugin that does the actual download, additional hooks
+ * are here to expose more values or cleanup before and after imports.
+ */
+
+
+/**
+ * Adds extra field targets
+ *
+ * Allow a feed to map to the URI (filepath) value of a media entity,
+ * To set the filename (which gets used in most media audit screens,
+ * And to place a file into a media gallery (Requires media_gallery.module)
+ *
+ * Implements HOOK_feeds_processor_targets_alter().
+ */
+function feeds_tamper_file_fetcher_feeds_processor_targets_alter(&$targets, $entity_type, $bundle_name) {
+  if ($entity_type == 'file') {
+    $targets['uri'] = array(
+      'name' => t('URI'),
+      'description' => t('Localised file URI.'),
+      // The rest of the default direct mapping/setting rules are fine.
+    );
+    $targets['filename'] = array(
+      'name' => t('Filename'),
+      'description' => t('Filename.'),
+      // The rest of the default direct mapping/setting rules are fine.
+    );
+    if (module_exists('media_gallery')) {
+      $targets['media_gallery_name'] = array(
+        'name' => t('Media Gallery : name'),
+        'description' => t('Name of the media gallery this file should be attached to.'),
+        // The rest of the default direct mapping/setting rules are fine.
+      );
+    }
+  }
+}
+
+
+/**
+ * Implements hook_ctools_plugin_api().
+ *
+ * Advertise that we provide a file_fetcher as a feeds tamper action.
+ */
+function feeds_tamper_file_fetcher_ctools_plugin_api($owner, $api) {
+  if ($owner == 'feeds_tamper' && $api == 'plugins') {
+    return array('version' => 2);
+  }
+  return NULL;
+}
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function feeds_tamper_file_fetcher_ctools_plugin_directory($module, $plugin) {
+  if ($module == 'feeds_tamper') {
+    return 'plugins';
+  }
+  return NULL;
+}
+
+/**
+ * Reverse lookup to fetch a file object given the local path.
+ *
+ * @param string $path
+ *   local filepath.
+ *
+ * @return mixed
+ *   Loaded $file object. NULL if not found.
+ */
+function feeds_tamper_file_fetcher_get_file_by_uri($path) {
+  $found = file_load_multiple(array(), array('uri' => file_build_uri($path)));
+  return reset($found);
+}
+
+
+/**
+ * Implements hook_feeds_presave().
+ *
+ * If I am about to save a feeds item
+ * and it's a 'file' and there is a uri
+ * and the URI is on the local system
+ * and there is a files table entry for it
+ * then the fid should be set
+ * and this becomes an update not an insert.
+ *
+ * Invoked before a feed item is saved.
+ */
+function feeds_tamper_file_fetcher_feeds_presave(FeedsSource $source, $entity, $item) {
+  if ($entity->feeds_item->entity_type != 'file') {
+    return FALSE;
+  }
+  $strings = array(
+    '%uri' => $entity->uri,
+  );
+  if (!isset($entity->uri)) {
+    // Skip saving this entity altogether.
+    $entity->feeds_item->skip = TRUE;
+    $source->log(__FUNCTION__, "File entity has a null URI, that confuses everyone, skip this", $strings);
+    return FALSE;
+  }
+  // Exit if the target file is not here!
+  if (!file_exists($entity->uri)) {
+    // Skip saving this entity altogether.
+    $entity->feeds_item->skip = TRUE;
+    $source->log(__FUNCTION__, "File not here yet '%uri' isn't available, I should not make a bad entry in the files table, skip this", $strings);
+    return FALSE;
+  }
+
+  // URI is set, so we must assume there is a fid?
+  // With media external sources, this is not our problem.
+  #if (!file_entity_file_is_local($entity)) {
+  #  $entity->feeds_item->skip = TRUE;
+  #  $source->log(__FUNCTION__, "URI %uri is not local (yet) - skipping", $strings);
+  #  return FALSE;
+  #}
+  // Fetch the file by URI, use the fid.
+  $files = file_load_multiple(array(), array('uri' => $entity->uri));
+  $file = reset($files);
+  if ($file && empty($entity->fid)) {
+    $entity->fid = $file->fid;
+    $strings['%fid'] = $file->fid;
+    $source->log(__FUNCTION__, 'Ensuring that the file:%uri is matched with its expected fid:%fid', $strings);
+  }
+
+  return NULL;
+}
+
+/**
+ * Attach imported files to their named gallery.
+ *
+ * Supports media_gallery.
+ *
+ * If I have just saved a file entity,
+ * and the import info knew what gallery the image should be attached to
+ * then add this item to the gallery.
+ *
+ * Needs to be post-save so we have the ID.
+ *
+ * Invoked after a feed item has been saved.
+ */
+function feeds_tamper_file_fetcher_feeds_after_save(FeedsSource $source, $entity, $item, $entity_id) {
+
+  if ($entity->feeds_item->entity_type != 'file') {
+    return;
+  }
+
+  if (empty($entity->media_gallery_name)) {
+    return;
+  }
+
+  $media_gallery_node_type = 'media_gallery';
+  $file_field_id = 'media_gallery_file';
+
+  $media_gallery_names = is_array($entity->media_gallery_name) ? $entity->media_gallery_name : array($entity->media_gallery_name);
+
+  // Allow attaching to multiple galleries if data implies that.
+  foreach ($media_gallery_names as $media_gallery_name) {
+    // Try to fetch an existing media gallery by the nominated title.
+    $gallery_nodes = node_load_multiple(array(), array('title' => $media_gallery_name, 'type' => $media_gallery_node_type));
+    // If there are dupes, just pop.
+    $gallery_node = reset($gallery_nodes);
+
+    // If not found, need to make a new gallery.
+    if (! $gallery_node) {
+      // https://drupal.org/node/1388922
+      // Create an Entity
+      $gallery_node = entity_create('node', array('type' => $media_gallery_node_type));
+      $gallery_node->uid = $entity->uid;
+      // Create a Entity Wrapper of that new Entity
+      $gallery_wrapper = entity_metadata_wrapper('node', $gallery_node);
+      $gallery_wrapper->title = $media_gallery_name;
+      // Add field data... ?
+      // $entity->field_text_field = 'Field value text';
+      $gallery_node->log = 'Created by feeds_tamper_file_fetcher';
+      $source->log(__FUNCTION__, 'Created new Media Gallery node "%media_gallery_name"', array('%media_gallery_name' => $media_gallery_name), WATCHDOG_INFO);
+      // Save the new node.
+      $gallery_wrapper->save();
+      // TODO repeatedly re-saving the gallery may be inefficient,
+      // but the alternatives (direct field saving()) avoid the API too much.
+    }
+    else {
+      $gallery_wrapper = entity_metadata_wrapper('node', $gallery_node);
+    }
+    // Note the distinction between $gallery_node and $gallery_wrapper .
+
+    // Add the current file to this gallery - if it's not already.
+    $existing = $gallery_wrapper->__isset($file_field_id) ? $gallery_wrapper->{$file_field_id} : NULL;
+    // This is a ... EntityListWrapper ?
+
+    $exists = FALSE;
+    if (is_object($existing)) {
+      foreach ($existing as $delta => $row_entry) {
+        $found = $row_entry->value();
+        if ($found['fid'] == $entity->fid) {
+          // This file is already attached to this gallery.
+          $exists = TRUE;
+        }
+      }
+    }
+    if ($exists) {
+      $source->log(__FUNCTION__, 'File %file_uri is already attached to gallery "%media_gallery_name"', array('%file_uri' => $entity->uri, '%media_gallery_name' => $media_gallery_name), WATCHDOG_INFO);
+      continue;
+    }
+
+    // Prepare the file data row to insert.
+    // This took an hour of guessing and trial and error to figure out
+    // what was expected as row_data to set().
+    $row_data = array(
+      #'media_gallery_file_display' => 1,
+      'display' => 1,
+      #'media_gallery_file_fid' => $entity->fid,
+      'fid' => $entity->fid,
+    );
+
+    // Can append to the list by using delta of NULL.
+    // Lost ages trying to deduce the delta but it hurt.
+    $gallery_wrapper->{$file_field_id}[NULL]->set($row_data);
+    $gallery_wrapper->save();
+    $source->log(__FUNCTION__, 'Attached %file_uri to gallery "%media_gallery_name"', array('%file_uri' => $entity->uri, '%media_gallery_name' => $media_gallery_name), WATCHDOG_INFO);
+
+  }
+  #dpm(get_defined_vars());
+}

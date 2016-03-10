@@ -1,0 +1,17 @@
+name = Mail Manager
+description = Mail Manager integrates with mail_edit offering an easy to use API for defining editable mails.
+package = Mail
+core = 7.x
+version = 7.x-1.x
+
+dependencies[] = mimemail
+dependencies[] = mail_edit
+dependencies[] = mailsystem
+dependencies[] = mimemail_compress
+
+files[] = includes/hooks.inc
+files[] = includes/token.inc
+files[] = includes/mailsystem.inc
+files[] = includes/mail_manager.inc
+files[] = includes/managed_mail.inc
+files[] = includes/registry.inc

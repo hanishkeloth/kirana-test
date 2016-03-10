@@ -1,0 +1,16 @@
+name = Field placeholder translation
+description = Provides i18n field integration for Field placeholder module
+package = Multilingual - Internationalization
+core = 7.x
+
+dependencies[] = field_placeholder
+dependencies[] = i18n_field
+
+files[] = i18n_field_placeholder.test
+
+; Information added by  packaging script on 2013-11-21
+version = "7.x-2.0-beta1"
+core = "7.x"
+project = "field_placeholder"
+datestamp = "1385024393"
+

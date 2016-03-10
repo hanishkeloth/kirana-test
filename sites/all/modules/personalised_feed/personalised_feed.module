@@ -1,0 +1,125 @@
+<?php
+/**
+ * Implements hook_menu().
+ */
+
+function personalised_feed_menu() {
+  $items['personalised_feed'] = array(
+   'title' => 'Personalised Feed Quiz',
+   'description' => "Personalised Feed Quiz",
+   'page callback' => '_personalised_feed_quiz',
+   'access callback' => 'user_is_logged_in',
+   'weight' => 10,
+  );
+
+ /* $items['personalised_feed/update_gender/%'] = array(
+   'title' => 'Personalised Feed Quiz',
+   'description' => "Update user profile Gender",
+   'page callback' => '_update_user_profile_gender',
+   'page arguments' => array(2),
+   'access callback' => 'user_is_logged_in',
+   'weight' => 10,
+  );
+
+  $items['personalised_feed/test'] = array(
+   'title' => 'Personalised Feed Quiz',
+   'description' => "Personalised Feed Quiz",
+   'page callback' => 'personalised_feed_test',
+   'access callback' => 'user_is_logged_in',
+   'weight' => 10,
+  );
+*/
+  return $items;
+}
+
+/*function personalised_feed_test() {
+  return theme('personalised_feed_test');
+}*/
+
+/**
+ * Implements hook_block_theme().
+ */
+/*function personalised_feed_theme() {
+    return array(
+        'personalised_feed' => array(
+            'variables' => array('hashtags_count' => array()),
+            'template' => 'themes/personalised_feed',
+        ),
+        'personalised_feed_test' => array(
+            'template' => 'themes/personalised_feed_test',
+        ),
+    );
+}
+*/
+/**
+ * Get user followed hashtags count and display personalised feed quiz
+ */
+
+function _personalised_feed_quiz(){
+  global $user;
+  $hashtags_count = _get_user_hashtags($user->uid);
+  return theme('personalised_feed',array('hashtags_count'=>$hashtags_count));
+}
+
+function _get_user_hashtags($user_id){
+  $hashtags_count = db_select('flagging','flg')
+    ->fields('flg',array('entity_id'))
+    ->condition('flg.uid', $user_id,'=')
+    ->execute()->rowCount();
+  return $hashtags_count;
+}
+
+/**
+ * Update the user profile gender
+ */
+function _update_user_profile_gender($gender) {
+  global $user;
+  $user->field_gender_profile['und'][0]['value'] = $gender;
+  unset($user->pass);
+  user_save((object) array('uid' => $user->uid), (array) $user);
+  drupal_json_output($user->field_gender_profile['und'][0]['value']);
+}
+
+/*function personalised_feed_user_login(&$edit, $account) {
+  if($account->access == 0){
+    drupal_set_message("user is logged in first time test");
+    variable_get('ajax_register_login_redirect_behavior', 'default');
+    variable_set('ajax_register_login_redirect_url', 'personalised_feed');
+    drupal_set_message("destination=".$_GET['destination']);
+    $_GET['destination'] = 'personalised_feed';
+  } else {
+    global $user;
+    $hashtags_count = _get_user_hashtags($user->uid);
+    if(empty($user->field_gender_profile) || $hashtags_count < 5){
+      drupal_set_message("Redirect to personalised feed");
+      variable_set('ajax_register_login_redirect_url', 'personalised_feed');
+      $_GLOBALS['destination'] = 'personalised_feed';
+    }
+  }
+}*/
+
+/**
+* Implements hook_fboauth_actions_alter(): Customise redirect path
+*
+* @see hook_fboauth_actions_alter();
+*/
+function personalised_feed_fboauth_actions_alter(&$actions) {
+  $actions['connect']['callback'] = '_personalised_feed_fboauth_action_connect';
+}
+
+/**
+* Callback for CUSTOM_MODULE_fboauth_actions_alter(): Customise redirect path
+*
+* @see hook_fboauth_actions_alter();
+*/
+function _personalised_feed_fboauth_action_connect($app_id, $access_token) {
+
+// Call the default action first
+  fboauth_action_connect($app_id, $access_token);
+  global $user; //dpm($user);
+  $hashtags_count = _get_user_hashtags($user->uid);
+  if($hashtags_count < 5) {
+    drupal_goto("style");
+  }
+  drupal_goto('<front>');
+}

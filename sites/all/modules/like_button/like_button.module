@@ -1,0 +1,15 @@
+<?php 
+
+function like_button_process_rate_template_thumbs_up(&$variables) {
+  extract($variables);
+
+  $classes = 'rate-thumbs-up-btn-up';
+
+  if (isset($results['user_vote']) && $results['user_vote'] == $links[0]['value']) {
+    $classes .= ' user-voted';
+  } else {
+    $classes .= ' user-not-voted';
+  }
+
+  $variables['up_button'] = theme('rate_button', array('text' => $links[0]['text'], 'href' => $links[0]['href'], 'class' => $classes));
+}
